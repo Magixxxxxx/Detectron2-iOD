@@ -10,7 +10,7 @@ DATALOADER:
 DATASETS:
   TRAIN: ('emm+5.json', )
   TEST: ('voc_2007_test', )
-  MEMORY: '../data/voc2007/annotations/emm15_50img.json'
+  # MEMORY: '../data/voc2007/annotations/emm15_50img.json'
 SOLVER:
   IMS_PER_BATCH: 8
   BASE_LR: 0.01

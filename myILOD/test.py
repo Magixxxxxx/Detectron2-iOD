@@ -1,4 +1,10 @@
 import detectron2
 import os
-print(os.listdir('/root/userfolder/data/voc2007/annotations'))
-print(detectron2.__version__)
+
+import torch
+
+a = torch.tensor([[1,2]])
+b = torch.tensor([[2,3]])
+
+
+print(torch.cat((a,b), 0))

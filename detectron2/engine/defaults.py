@@ -419,6 +419,11 @@ class DefaultTrainer(SimpleTrainer):
         return model
 
     @classmethod
+    def build_memory(cls, cfg):
+        memory_dict = {}
+        return memory_dict
+
+    @classmethod
     def build_optimizer(cls, cfg, model):
         """
         Returns:

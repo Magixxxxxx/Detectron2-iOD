@@ -18,8 +18,52 @@ from PIL import Image, ImageDraw
 from detectron2.data.detection_utils import convert_PIL_to_numpy
 import numpy as np
 import torch, sys, random, json, logging, time, cv2
+from torch.nn.parallel import DistributedDataParallel
+from detectron2.utils.logger import setup_logger
 
 class Trainer(DefaultTrainer):
+
+    def __init__(self, cfg):
+        """
+        Args:
+            cfg (CfgNode):
+        """
+        logger = logging.getLogger("detectron2")
+        if not logger.isEnabledFor(logging.INFO):  # setup_logger is not called for d2
+            setup_logger()
+        cfg = DefaultTrainer.auto_scale_workers(cfg, comm.get_world_size())
+        # Assume these objects must be constructed in this order.
+        model = self.build_model(cfg) # 没读参数
+        optimizer = self.build_optimizer(cfg, model)
+        data_loader = self.build_train_loader(cfg)
+
+        # EMM
+        self.memory = self.build_memory(cfg)
+        self.old_model = self.build_model(cfg)
+        self.old_model
+
+        # For training, wrap with DDP. But don't need this for inference.
+        if comm.get_world_size() > 1:
+            model = DistributedDataParallel(
+                model, device_ids=[comm.get_local_rank()], broadcast_buffers=False
+            )
+        super().__init__(model, data_loader, optimizer)
+
+        self.scheduler = self.build_lr_scheduler(cfg, optimizer)
+        # Assume no other objects need to be checkpointed.
+        # We can later make it checkpoint the stateful hooks
+        self.checkpointer = DetectionCheckpointer(
+            # Assume you want to save checkpoints together with logs/statistics
+            model,
+            cfg.OUTPUT_DIR,
+            optimizer=optimizer,
+            scheduler=self.scheduler,
+        )
+        self.start_iter = 0
+        self.max_iter = cfg.SOLVER.MAX_ITER
+        self.cfg = cfg
+
+        self.register_hooks(self.build_hooks())
 
     def run_step(self):
 
@@ -85,6 +129,7 @@ class Trainer(DefaultTrainer):
         data_time = time.perf_counter() - start
 
         loss_dict = self.model(data)
+
         losses = sum(loss_dict.values())
 
         self.optimizer.zero_grad()

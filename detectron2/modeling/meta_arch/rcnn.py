@@ -1,5 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import logging
+from urllib import response
 import numpy as np
 from typing import Optional, Tuple
 import torch
@@ -162,8 +163,9 @@ class GeneralizedRCNN(nn.Module):
             assert "proposals" in batched_inputs[0]
             proposals = [x["proposals"].to(self.device) for x in batched_inputs]
             proposal_losses = {}
-
-        _, detector_losses = self.roi_heads(images, features, proposals, gt_instances)
+        
+        # ZJW
+        response, detector_losses = self.roi_heads(images, features, proposals, gt_instances)
         if self.vis_period > 0:
             storage = get_event_storage()
             if storage.iter % self.vis_period == 0:
@@ -172,7 +174,8 @@ class GeneralizedRCNN(nn.Module):
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
-        return losses
+        
+        return response, losses
 
     def inference(self, batched_inputs, detected_instances=None, do_postprocess=True):
         """

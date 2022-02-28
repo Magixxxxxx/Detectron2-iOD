@@ -2,6 +2,8 @@ import os
 import logging
 from collections import OrderedDict
 from random import randint
+from urllib import response
+from detectron2.utils.collect_env import detect_compute_compatibility
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
 
@@ -24,55 +26,29 @@ from detectron2.utils.logger import setup_logger
 class Trainer(DefaultTrainer):
 
     def __init__(self, cfg):
-        """
-        Args:
-            cfg (CfgNode):
-        """
-        logger = logging.getLogger("detectron2")
-        if not logger.isEnabledFor(logging.INFO):  # setup_logger is not called for d2
-            setup_logger()
-        cfg = DefaultTrainer.auto_scale_workers(cfg, comm.get_world_size())
-        # Assume these objects must be constructed in this order.
-        model = self.build_model(cfg) # 没读参数
-        optimizer = self.build_optimizer(cfg, model)
-        data_loader = self.build_train_loader(cfg)
+        super().__init__(cfg)
 
-        # EMM
-        self.memory = self.build_memory(cfg)
+        # Ein:
+        # self.memory = self.build_memory(cfg)
         self.old_model = self.build_model(cfg)
-        self.old_model
-
-        # For training, wrap with DDP. But don't need this for inference.
-        if comm.get_world_size() > 1:
-            model = DistributedDataParallel(
-                model, device_ids=[comm.get_local_rank()], broadcast_buffers=False
-            )
-        super().__init__(model, data_loader, optimizer)
-
-        self.scheduler = self.build_lr_scheduler(cfg, optimizer)
-        # Assume no other objects need to be checkpointed.
-        # We can later make it checkpoint the stateful hooks
-        self.checkpointer = DetectionCheckpointer(
-            # Assume you want to save checkpoints together with logs/statistics
-            model,
-            cfg.OUTPUT_DIR,
-            optimizer=optimizer,
-            scheduler=self.scheduler,
-        )
-        self.start_iter = 0
-        self.max_iter = cfg.SOLVER.MAX_ITER
-        self.cfg = cfg
-
-        self.register_hooks(self.build_hooks())
+        # state_dict ={'module.' + k:v for k,v in torch.load(cfg.MODEL.WEIGHTS)['model'].items()}
+        self.old_model.load_state_dict(torch.load(cfg.MODEL.WEIGHTS)['model'])
+        self.old_model.eval()
 
     def run_step(self):
 
         assert self.model.training, "[SimpleTrainer] model was changed to eval mode!"
         start = time.perf_counter()
+
+        '''
+        data: file_name, image, instances(num_instances, image_height, image_width, fields=[gt_boxes, gt_classes])
+        old_response: n * instances when testing, 20*512 , 4*512 when training
+        new_response: 20*512 , 4*512
+        '''
         data = next(self._data_loader_iter)
 
         # EMM
-        if self.memory:
+        if False:
             for each_img in data:
                 # each_img: 3 (b, g, r) * H * W
                 replay_ann = random.choice(self.memory['annotations'])
@@ -122,16 +98,35 @@ class Trainer(DefaultTrainer):
                 each_img['image'] = torch.as_tensor(np.ascontiguousarray(convert_PIL_to_numpy(new_img, "BGR").transpose(2, 0, 1)))
                 each_img['instances']._fields['gt_boxes'].tensor = gt_boxes
                 each_img['instances']._fields['gt_classes'] = gt_classes
-
         # sys.exit(0)
         # END
 
         data_time = time.perf_counter() - start
+        with torch.no_grad():
+            old_predictions = self.old_model.inference(data)
 
-        loss_dict = self.model(data)
+        response, loss_dict = self.model(data)  
+        loss_dict['distill loss']=0
+
+        # print(response, end='\n\n')
+        # print(loss_dict, end='\n\n')
+
+        for each_old_prediction, each_img in zip(old_predictions, data):
+            each_img['loss_weight'] = torch.tensor([1] * len(each_img['instances']) + [s for s in each_old_prediction['instances'].get('scores')])
+            each_img['instances'].set(
+                'gt_boxes', 
+                each_img['instances'].get('gt_boxes').cat(
+                        [each_img['instances'].get('gt_boxes'), each_old_prediction['instances'].get('pred_boxes').to('cpu')]
+                    )
+                )          
+            each_img['instances'].set(
+                'gt_classes', 
+                torch.cat(
+                        (each_img['instances'].get('gt_classes'), each_old_prediction['instances'].get('pred_classes').cpu())
+                    )
+                )
 
         losses = sum(loss_dict.values())
-
         self.optimizer.zero_grad()
         losses.backward()
 
@@ -146,7 +141,6 @@ class Trainer(DefaultTrainer):
 
         self.optimizer.step()
 
-    # TODO: EMM
     @classmethod
     def build_memory(cls, cfg):
         if cfg.DATASETS.MEMORY:
@@ -193,9 +187,7 @@ def setup(args):
     cfg.merge_from_file(args.config_file)   # 从config file 覆盖配置
     cfg.merge_from_list(args.opts)          # 从CLI参数 覆盖配置
     cfg.freeze()
-
     default_setup(cfg, args)
-
     return cfg
 
 def main(args):
@@ -217,18 +209,17 @@ def main(args):
         return res
     
     model = Trainer.build_model(cfg)  
-    for n,p in model.named_parameters():
-        if p.requires_grad:
-            print(n)
+    # for n,p in model.named_parameters():
+    #     if p.requires_grad:
+    #         print(n)
 
     trainer = Trainer(cfg)
     trainer.resume_or_load(resume=args.resume)
     return trainer.train()
 
-
 if __name__ == "__main__":
-    args = default_argument_parser().parse_args()
-    args.dist_url='tcp://127.0.0.1:{}'.format(randint(30000,50000))
+    args = default_argument_parser().parse_known_args()[0]
+    args.dist_url = 'tcp://127.0.0.1:{}'.format(randint(30000,50000))
     print("Command Line Args:", args)
 
     launch(

@@ -283,7 +283,8 @@ class DefaultTrainer(SimpleTrainer):
 
         self.scheduler = self.build_lr_scheduler(cfg, optimizer)
         # Assume no other objects need to be checkpointed.
-        # We can later make it checkpoint the stateful hooks
+        # We can later make it checkpoint the 
+        # ful hooks
         self.checkpointer = DetectionCheckpointer(
             # Assume you want to save checkpoints together with logs/statistics
             model,

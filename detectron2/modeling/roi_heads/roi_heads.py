@@ -442,7 +442,8 @@ class Res5ROIHeads(ROIHeads):
                 mask_features = box_features[torch.cat(fg_selection_masks, dim=0)]
                 del box_features
                 losses.update(self.mask_head(mask_features, proposals))
-            return [], losses
+            # ZJW
+            return predictions, losses 
         else:
             pred_instances, _ = self.box_predictor.inference(predictions, proposals)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)

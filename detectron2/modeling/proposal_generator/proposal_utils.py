@@ -57,6 +57,7 @@ def find_top_rpn_proposals(
     level_ids = []  # #lvl Tensor, each of shape (topk,)
     batch_idx = torch.arange(num_images, device=device)
     for level_id, (proposals_i, logits_i) in enumerate(zip(proposals, pred_objectness_logits)):
+
         Hi_Wi_A = logits_i.shape[1]
         num_proposals_i = min(pre_nms_topk, Hi_Wi_A)
 

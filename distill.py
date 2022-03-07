@@ -1,3 +1,4 @@
+import enum
 import os
 import logging
 from collections import OrderedDict
@@ -29,11 +30,9 @@ class Trainer(DefaultTrainer):
         super().__init__(cfg)
 
         # Ein:
-        # self.memory = self.build_memory(cfg)
+        self.memory = self.build_memory(cfg)
         self.old_model = self.build_model(cfg)
-        # state_dict ={'module.' + k:v for k,v in torch.load(cfg.MODEL.WEIGHTS)['model'].items()}
         self.old_model.load_state_dict(torch.load(cfg.MODEL.WEIGHTS)['model'])
-        self.old_model.eval()
 
     def run_step(self):
 
@@ -42,94 +41,45 @@ class Trainer(DefaultTrainer):
 
         '''
         data: file_name, image, instances(num_instances, image_height, image_width, fields=[gt_boxes, gt_classes])
-        old_response: n * instances when testing, 20*512 , 4*512 when training
+        old_response: n * instances when eval(), // (20*512 , 4*512) (loss_dict) when training
         new_response: 20*512 , 4*512
+        proposals: Instances() * 2000
         '''
         data = next(self._data_loader_iter)
-
-        # EMM
-        if False:
-            for each_img in data:
-                # each_img: 3 (b, g, r) * H * W
-                replay_ann = random.choice(self.memory['annotations'])
-                replay_img = self.memory['images'][replay_ann['image_id'] - 1]
-                mm = Image.open('datasets/VOC2007/JPEGImages/' + replay_img['file_name'])
-
-                # cut
-                x1, y1, x2, y2 = replay_ann['bbox']
-                bbox = (x1, y1, x1 + x2, y1 + y2)
-                mm_cat = torch.tensor(replay_ann['category_id']) 
-                mm_cut = mm.crop(bbox)
-                
-                # paste
-                paste_x = random.randint(0, max(0, each_img['image'].size()[2] - x2))
-                paste_y = random.randint(0, max(0, each_img['image'].size()[1] - y2))
-                b, g, r = cv2.split(each_img['image'].byte().permute(1, 2, 0).numpy())
-                new_img = Image.fromarray(cv2.merge([r, g, b]))
-                new_img.paste(mm_cut, (paste_x, paste_y))
-
-                # fix labels
-                mm_box = torch.tensor([float(i) for i in [paste_x, paste_y, paste_x + x2, paste_y + y2]])
-                gt_boxes = torch.unsqueeze(mm_box, 0)
-                gt_classes = torch.unsqueeze(mm_cat, 0)
-
-                for box, cat in zip(each_img['instances']._fields['gt_boxes'].tensor, each_img['instances']._fields['gt_classes']):
-                    ixmin = np.maximum(mm_box[0], box[0])
-                    iymin = np.maximum(mm_box[1], box[1])
-                    ixmax = np.minimum(mm_box[2], box[2])
-                    iymax = np.minimum(mm_box[3], box[3])
-                    iw = np.maximum(ixmax - ixmin + 1.0, 0.0)
-                    ih = np.maximum(iymax - iymin + 1.0, 0.0)
-                    inters = iw * ih
-
-                    # union
-
-                    uni = (box[2] - box[0] + 1.0) * (box[3] - box[1] + 1.0)
-                    overlaps_of_box = inters / uni
-                    if overlaps_of_box <= 0.5:
-                        gt_boxes = torch.cat((gt_boxes, torch.unsqueeze(box, 0)))
-                        gt_classes = torch.cat((gt_classes, torch.unsqueeze(cat, 0)))
-                    # else:
-                    #     a = ImageDraw.ImageDraw(new_img)
-                    #     for b in gt_boxes:
-                    #         a.rectangle([int(i) for i in b])
-                    #     new_img.save(str(paste_x) + ".jpg")
-
-                each_img['image'] = torch.as_tensor(np.ascontiguousarray(convert_PIL_to_numpy(new_img, "BGR").transpose(2, 0, 1)))
-                each_img['instances']._fields['gt_boxes'].tensor = gt_boxes
-                each_img['instances']._fields['gt_classes'] = gt_classes
-        # sys.exit(0)
-        # END
-
         data_time = time.perf_counter() - start
+
+        # self.old_model.eval()
+
         with torch.no_grad():
-            old_predictions = self.old_model.inference(data)
+            old_rpn_logits, old_rpn_proposals, old_features,  _ = self.old_model(data)
+        
+        rpn_logits, rpn_proposals, features, loss_dict = self.model(data)
 
-        response, loss_dict = self.model(data)  
-        loss_dict['distill loss']=0
+        distill_loss_dict = self.calc_proposal_distill_loss(old_rpn_logits[0], old_rpn_proposals[0], rpn_logits[0], rpn_proposals[0])
 
-        # print(response, end='\n\n')
-        # print(loss_dict, end='\n\n')
-
-        for each_old_prediction, each_img in zip(old_predictions, data):
-            each_img['loss_weight'] = torch.tensor([1] * len(each_img['instances']) + [s for s in each_old_prediction['instances'].get('scores')])
-            each_img['instances'].set(
-                'gt_boxes', 
-                each_img['instances'].get('gt_boxes').cat(
-                        [each_img['instances'].get('gt_boxes'), each_old_prediction['instances'].get('pred_boxes').to('cpu')]
-                    )
-                )          
-            each_img['instances'].set(
-                'gt_classes', 
-                torch.cat(
-                        (each_img['instances'].get('gt_classes'), each_old_prediction['instances'].get('pred_classes').cpu())
-                    )
-                )
-
+        print(distill_loss_dict)
+        sys.exit(0)
+        # for each_old_prediction, each_img in zip(old_proposals, data):
+        #     each_img['old_proposals'] = old_proposals
+        #     each_img['loss_weight'] = torch.tensor([1] * len(each_img['instances']) + [s for s in each_old_prediction['instances'].get('scores')])
+        #     each_img['instances'].set(
+        #         'gt_boxes', 
+        #         each_img['instances'].get('gt_boxes').cat(
+        #                 [each_img['instances'].get('gt_boxes'), each_old_prediction['instances'].get('pred_boxes').to('cpu')]
+        #             )
+        #         )          
+        #     each_img['instances'].set(
+        #         'gt_classes', 
+        #         torch.cat(
+        #                 (each_img['instances'].get('gt_classes'), each_old_prediction['instances'].get('pred_classes').cpu())
+        #             )
+        #         )
+        #     print(each_img)
+        
         losses = sum(loss_dict.values())
         self.optimizer.zero_grad()
         losses.backward()
-
+        
         # use a new stream so the ops don't wait for DDP
         with torch.cuda.stream(
             torch.cuda.Stream()
@@ -144,12 +94,10 @@ class Trainer(DefaultTrainer):
     @classmethod
     def build_memory(cls, cfg):
         if cfg.DATASETS.MEMORY:
-            print("replay memory on ————————")
             with open(cfg.DATASETS.MEMORY) as f:
                 memory_dict = dict(json.load(f))
             return memory_dict
         else:
-            print("replay memory off ————————")
             return None
 
     @classmethod
@@ -178,6 +126,34 @@ class Trainer(DefaultTrainer):
         res = cls.test(cfg, model, evaluators)
         res = OrderedDict({k + "_TTA": v for k, v in res.items()})
         return res
+    
+    @classmethod
+    def calc_proposal_distill_loss(cls, old_rpn_logits, old_rpn_proposals, rpn_logits, rpn_proposals):
+        
+        # num_pos_obj = proposal1.objectness_logits.shape
+        # filter = torch.zeros(num_pos_obj).to('cuda')
+        # print(diff)
+        # loss = torch.sum([i * i for d in diff for i in d if abs(i) > 1])
+        # print(filter)
+        # loss = torch.mean(torch.max(torch.tensor([torch.mean(abs(d)) for d in diff], requires_grad = True).to('cuda'), filter))
+
+        filter = torch.zeros(rpn_logits.shape).to('cuda')
+
+        #logits loss
+        diff_logits = torch.max(old_rpn_logits - rpn_logits, filter) 
+        logits_loss = torch.mean(torch.mul(diff_logits, diff_logits))
+
+        #box loss
+        diff_proposals = old_rpn_proposals - rpn_proposals
+        filter_mask = old_rpn_logits.clone()
+        filter_mask[old_rpn_logits > 0.2] = 1
+        print(filter_mask)
+        box_loss = 0
+
+        loss = {}
+        loss['distill_rpn_box'] = box_loss
+        loss['distill_rpn_logits'] = logits_loss
+        return loss
 
 def setup(args):
     """
@@ -208,10 +184,7 @@ def main(args):
             verify_results(cfg, res)
         return res
     
-    model = Trainer.build_model(cfg)  
-    # for n,p in model.named_parameters():
-    #     if p.requires_grad:
-    #         print(n)
+    model = Trainer.build_model(cfg) 
 
     trainer = Trainer(cfg)
     trainer.resume_or_load(resume=args.resume)

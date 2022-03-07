@@ -158,24 +158,24 @@ class GeneralizedRCNN(nn.Module):
         features = self.backbone(images.tensor)
 
         if self.proposal_generator:
-            proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+            rpn_logits, rpn_proposals, proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
         else:
             assert "proposals" in batched_inputs[0]
             proposals = [x["proposals"].to(self.device) for x in batched_inputs]
             proposal_losses = {}
-        
+
         # ZJW
-        response, detector_losses = self.roi_heads(images, features, proposals, gt_instances)
+        _, detector_losses = self.roi_heads(images, features, proposals, gt_instances)
         if self.vis_period > 0:
             storage = get_event_storage()
             if storage.iter % self.vis_period == 0:
                 self.visualize_training(batched_inputs, proposals)
-
+            
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
         
-        return response, losses
+        return rpn_logits, rpn_proposals, features, losses
 
     def inference(self, batched_inputs, detected_instances=None, do_postprocess=True):
         """

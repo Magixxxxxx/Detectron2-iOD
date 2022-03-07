@@ -20,4 +20,4 @@ SOLVER:
 TEST:
   EVAL_PERIOD: 1000
 OUTPUT_DIR: './output/distill'
-SEED: 9999
+SEED: 9991

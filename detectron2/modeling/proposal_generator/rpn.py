@@ -1,4 +1,5 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+import sys
 from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
@@ -111,6 +112,7 @@ class StandardRPNHead(nn.Module):
         # NOTE: it assumes that creating an anchor generator does not have unwanted side effect.
         anchor_generator = build_anchor_generator(cfg, input_shape)
         num_anchors = anchor_generator.num_anchors
+
         box_dim = anchor_generator.box_dim
         assert (
             len(set(num_anchors)) == 1
@@ -448,7 +450,7 @@ class RPN(nn.Module):
         proposals = self.predict_proposals(
             anchors, pred_objectness_logits, pred_anchor_deltas, images.image_sizes
         )
-        return proposals, losses
+        return pred_objectness_logits, pred_anchor_deltas, proposals, losses
 
     # TODO: use torch.no_grad when torchscript supports it.
     # https://github.com/pytorch/pytorch/pull/41371
@@ -474,6 +476,7 @@ class RPN(nn.Module):
         pred_objectness_logits = [t.detach() for t in pred_objectness_logits]
         pred_anchor_deltas = [t.detach() for t in pred_anchor_deltas]
         pred_proposals = self._decode_proposals(anchors, pred_anchor_deltas)
+
         return find_top_rpn_proposals(
             pred_proposals,
             pred_objectness_logits,

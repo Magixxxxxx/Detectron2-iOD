@@ -257,12 +257,14 @@ class ROIHeads(torch.nn.Module):
         # points (under one tested configuration).
         if self.proposal_append_gt:
             proposals = add_ground_truth_to_proposals(gt_boxes, proposals)
+            
 
         proposals_with_gt = []
 
         num_fg_samples = []
         num_bg_samples = []
         for proposals_per_image, targets_per_image in zip(proposals, targets):
+
             has_gt = len(targets_per_image) > 0
             match_quality_matrix = pairwise_iou(
                 targets_per_image.gt_boxes, proposals_per_image.proposal_boxes
@@ -414,13 +416,26 @@ class Res5ROIHeads(ROIHeads):
     def forward(self, images, features, proposals, targets=None):
         """
         See :meth:`ROIHeads.forward`.
+        features['res4'].shape: [1, 1024, 30, 40]
+
+        proposals: 
+            2000 * instance(box: 4 * 2000 , objectness_logitss: 512)  
+                randperm--->  
+            512 * instance(box: 4 * 512 , objectness_logitss: 512)
+        targets:
+        proposal_boxes: 512 * instance(box: 512 *4 , objectness_logitss: 512, gt_classes: 512)
+        box_features: 512 *7 *7 
         """
-        del images
+
+        # ZJW:
+        new_proposals = proposals
 
         if self.training:
             assert targets
             proposals = self.label_and_sample_proposals(proposals, targets)
+
         del targets
+        del images
 
         proposal_boxes = [x.proposal_boxes for x in proposals]
         box_features = self._shared_roi_transform(
@@ -443,7 +458,7 @@ class Res5ROIHeads(ROIHeads):
                 del box_features
                 losses.update(self.mask_head(mask_features, proposals))
             # ZJW
-            return predictions, losses 
+            return new_proposals, losses 
         else:
             pred_instances, _ = self.box_predictor.inference(predictions, proposals)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)

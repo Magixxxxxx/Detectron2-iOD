@@ -137,17 +137,28 @@ class Trainer(DefaultTrainer):
         # print(filter)
         # loss = torch.mean(torch.max(torch.tensor([torch.mean(abs(d)) for d in diff], requires_grad = True).to('cuda'), filter))
 
-        filter = torch.zeros(rpn_logits.shape).to('cuda')
-
+        
         #logits loss
-        diff_logits = torch.max(old_rpn_logits - rpn_logits, filter) 
+        filter_logits = torch.zeros(rpn_logits.shape).to('cuda')
+        print(torch.nn.functional.softmax(old_rpn_logits))
+        diff_logits = torch.max(old_rpn_logits - rpn_logits, filter_logits) 
         logits_loss = torch.mean(torch.mul(diff_logits, diff_logits))
 
         #box loss
-        diff_proposals = old_rpn_proposals - rpn_proposals
-        filter_mask = old_rpn_logits.clone()
-        filter_mask[old_rpn_logits > 0.2] = 1
-        print(filter_mask)
+        thresh = 0.7
+        s = old_rpn_proposals.shape
+        
+        # a = torch.tensor([torch.mul(img, img) for b in (old_rpn_proposals - rpn_proposals) for img in b])
+
+        mask_box = old_rpn_logits.clone()
+        mask_box[old_rpn_logits > -7] = 1
+        diff_boxes = old_rpn_proposals - rpn_proposals
+
+        for each_img in diff_boxes:
+            for diff_box in each_img:
+                print(sum(diff_box * diff_box))
+                break
+        print(mask_box)
         box_loss = 0
 
         loss = {}

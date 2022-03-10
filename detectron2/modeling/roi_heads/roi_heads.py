@@ -419,21 +419,18 @@ class Res5ROIHeads(ROIHeads):
         features['res4'].shape: [1, 1024, 30, 40]
 
         proposals: 
-            2000 * instance(box: 4 * 2000 , objectness_logitss: 512)  
+            2000 * instance(box: 4 * 2000 , objectness_logits: 512)  
                 randperm--->  
-            512 * instance(box: 4 * 512 , objectness_logitss: 512)
+            512 * instance(box: 4 * 512 , objectness_logits: 512)
         targets:
-        proposal_boxes: 512 * instance(box: 512 *4 , objectness_logitss: 512, gt_classes: 512)
+        proposal_boxes: 512 * instance(box: 512 *4 , objectness_logits: 512, gt_classes: 512)
         box_features: 512 *7 *7 
         """
-
-        # ZJW:
-        new_proposals = proposals
 
         if self.training:
             assert targets
             proposals = self.label_and_sample_proposals(proposals, targets)
-
+        
         del targets
         del images
 
@@ -458,7 +455,7 @@ class Res5ROIHeads(ROIHeads):
                 del box_features
                 losses.update(self.mask_head(mask_features, proposals))
             # ZJW
-            return new_proposals, losses 
+            return _, losses 
         else:
             pred_instances, _ = self.box_predictor.inference(predictions, proposals)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)

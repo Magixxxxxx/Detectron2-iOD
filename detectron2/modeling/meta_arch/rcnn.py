@@ -70,6 +70,12 @@ class GeneralizedRCNN(nn.Module):
         assert (
             self.pixel_mean.shape == self.pixel_std.shape
         ), f"{self.pixel_mean} and {self.pixel_std} have different shapes!"
+        
+        # ZJW
+        self.t_proposals = None
+        self.t_rpn_logits = None
+        self.t_features = None
+        self.t_rcn = None
 
     @classmethod
     def from_config(cls, cfg):
@@ -158,13 +164,13 @@ class GeneralizedRCNN(nn.Module):
         features = self.backbone(images.tensor)
 
         if self.proposal_generator:
-            rpn_logits, rpn_proposals, proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+            proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
         else:
             assert "proposals" in batched_inputs[0]
             proposals = [x["proposals"].to(self.device) for x in batched_inputs]
             proposal_losses = {}
 
-        # ZJW
+        
         _, detector_losses = self.roi_heads(images, features, proposals, gt_instances)
         if self.vis_period > 0:
             storage = get_event_storage()
@@ -174,8 +180,14 @@ class GeneralizedRCNN(nn.Module):
         losses = {}
         losses.update(detector_losses)
         losses.update(proposal_losses)
-        
-        return rpn_logits, rpn_proposals, features, losses
+
+        # ZJW
+        if self.t_proposals:
+            distill_losses = {}
+            losses.update(distill_losses)
+
+        del features
+        return losses, _
 
     def inference(self, batched_inputs, detected_instances=None, do_postprocess=True):
         """
@@ -201,7 +213,7 @@ class GeneralizedRCNN(nn.Module):
 
         if detected_instances is None:
             if self.proposal_generator:
-                proposals, _ = self.proposal_generator(images, features, None)
+                proposals, _, _, _ = self.proposal_generator(images, features, None)
             else:
                 assert "proposals" in batched_inputs[0]
                 proposals = [x["proposals"].to(self.device) for x in batched_inputs]
@@ -241,6 +253,26 @@ class GeneralizedRCNN(nn.Module):
             processed_results.append({"instances": r})
         return processed_results
 
+    #ZJW
+    def get_distill_target(self, batched_inputs):
+
+        images = self.preprocess_image(batched_inputs)
+
+        gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+
+        features = self.backbone(images.tensor)
+
+        proposals, rpn_logits, rpn_proposals = self.proposal_generator.get_distill_target(images, features, gt_instances)
+
+        return features, rpn_logits, rpn_proposals
+
+    def set_distill_target(self, t_features, t_rpn_proposals, t_rpn_logits):
+        self.t_features = t_features
+        self.t_proposals = t_rpn_proposals
+        self.t_rpn_logits = t_rpn_logits
+
+    def distill_rpn():
+        return 
 
 @META_ARCH_REGISTRY.register()
 class ProposalNetwork(nn.Module):

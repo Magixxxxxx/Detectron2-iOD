@@ -284,6 +284,17 @@ class SimpleTrainer(TrainerBase):
             }
             total_losses_reduced = sum(loss for loss in metrics_dict.values())
 
+            # self.storage.put_scalar("total_loss", total_losses_reduced)
+
+            # ZJW
+            # self.storage.put_scalar("distill_rpn_box", metrics_dict['distill_rpn_box'])
+            # self.storage.put_scalar("distill_rpn_logits", metrics_dict['distill_rpn_logits'])
             self.storage.put_scalar("total_loss", total_losses_reduced)
+           #  self.storage.put_scalar("distill_boxloss", metrics_dict['distill_rpn_box'])
+            
+
+            # for k, v in metrics_dict:
+            #     self.storage.put_scalar(k, v)
+
             if len(metrics_dict) > 1:
                 self.storage.put_scalars(**metrics_dict)

@@ -13,5 +13,8 @@ python mytrain.py --num-gpus 8 --config-file "myILOD/configs/emm.yaml" DATASETS.
 
 # distill
 python distill.py --num-gpus 1 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 1 OUTPUT_DIR './output/test'
-python distill.py --num-gpus 4 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" OUTPUT_DIR './output/distill'
+
+python myILOD/utils/get_inter_output.py --num-gpus 1 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 1 OUTPUT_DIR './output/test'
+
+python distill.py --num-gpus 4 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 4 OUTPUT_DIR './output/no_distill'
 

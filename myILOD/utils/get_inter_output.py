@@ -24,6 +24,18 @@ import torch, sys, random, json, logging, time, cv2
 from torch.nn.parallel import DistributedDataParallel
 from detectron2.utils.logger import setup_logger
 
+from detectron2.data import (
+    MetadataCatalog,
+    build_detection_test_loader,
+    build_detection_train_loader,
+)
+from detectron2.evaluation import (
+    DatasetEvaluator,
+    inference_on_dataset,
+    print_csv_format,
+    verify_results,
+)
+
 class Trainer(DefaultTrainer):
 
     def __init__(self, cfg):
@@ -31,8 +43,8 @@ class Trainer(DefaultTrainer):
 
         # Ein:
         self.memory = self.build_memory(cfg)
-        self.t_model = self.build_model(cfg)
-        self.t_model.load_state_dict(torch.load(cfg.MODEL.WEIGHTS)['model'])
+        self.old_model = self.build_model(cfg)
+        self.old_model.load_state_dict(torch.load(cfg.MODEL.WEIGHTS)['model'])
 
     def run_step(self):
 
@@ -49,17 +61,32 @@ class Trainer(DefaultTrainer):
         data_time = time.perf_counter() - start
 
         with torch.no_grad():
-            t_features, t_rpn_logits, t_rpn_proposals = self.t_model.get_distill_target(data)
+            old_rpn_logits, old_rpn_proposals,  _ = self.old_model(data)
         
-        self.model.set_distill_target(t_features, t_rpn_logits, t_rpn_proposals)
-        loss_dict, _ = self.model(data)
+        rpn_logits, rpn_proposals, loss_dict = self.model(data)
 
-        # distill_loss_dict = self.rpn_distill_losses(old_rpn_logits[0], old_rpn_proposals[0], rpn_logits[0], rpn_proposals[0])
-        # loss_dict.update(distill_loss_dict)
+        distill_loss_dict = self.rpn_distill_losses(old_rpn_logits[0], old_rpn_proposals[0], rpn_logits[0], rpn_proposals[0])
+        
+        loss_dict.update(distill_loss_dict)
+        print(loss_dict)
 
-        del t_features, t_rpn_logits, t_rpn_proposals
-        sys.exit(0)
-
+        # for each_old_prediction, each_img in zip(old_proposals, data):
+        #     each_img['old_proposals'] = old_proposals
+        #     each_img['loss_weight'] = torch.tensor([1] * len(each_img['instances']) + [s for s in each_old_prediction['instances'].get('scores')])
+        #     each_img['instances'].set(
+        #         'gt_boxes', 
+        #         each_img['instances'].get('gt_boxes').cat(
+        #                 [each_img['instances'].get('gt_boxes'), each_old_prediction['instances'].get('pred_boxes').to('cpu')]
+        #             )
+        #         )          
+        #     each_img['instances'].set(
+        #         'gt_classes', 
+        #         torch.cat(
+        #                 (each_img['instances'].get('gt_classes'), each_old_prediction['instances'].get('pred_classes').cpu())
+        #             )
+        #         )
+        #     print(each_img)
+        
         losses = sum(loss_dict.values())
         self.optimizer.zero_grad()
         losses.backward()
@@ -113,27 +140,35 @@ class Trainer(DefaultTrainer):
     
     @classmethod
     def rpn_distill_losses(cls, old_rpn_logits, old_rpn_proposals, rpn_logits, rpn_proposals):
-        loss = {}
         
         #logits loss
         filter_logits = torch.zeros(rpn_logits.shape).to('cuda')
         diff_logits = torch.max(old_rpn_logits - rpn_logits, filter_logits) 
-        logits_loss = torch.mean(torch.mean(torch.mul(diff_logits, diff_logits)))
-
-        loss['dist_rpn_logits_loss'] = logits_loss
+        logits_loss = torch.mean(torch.mul(diff_logits, diff_logits))
 
         #box loss
+        thresh = 0
+        s = old_rpn_proposals.shape
+
+        # a = torch.tensor([torch.mul(img, img) for b in (old_rpn_proposals - rpn_proposals) for img in b])
         mask_box = old_rpn_logits.clone()
-        mask_box[old_rpn_logits > rpn_logits] = 1
-        mask_box[old_rpn_logits <= rpn_logits] = 0
-        mask_box = mask_box.unsqueeze(dim = 2)
-
+        mask_box[old_rpn_logits > 0.7] = 1
+        mask_box[old_rpn_logits <= 0.7] = 0
         diff_boxes = old_rpn_proposals - rpn_proposals
-        diff_boxes = torch.mul(diff_boxes, mask_box)
 
-        box_loss = torch.mean(torch.mul(diff_boxes, diff_boxes)) 
-        loss['dist_rpn_box_loss'] = box_loss        
+        diff_boxes = torch.tensor([
+            [
+                torch.tensor([ torch.sum(diff_box * diff_box)]) 
+                for diff_box in each_img
+            ] 
+            for each_img in diff_boxes
+        ]).to('cuda')
 
+        box_loss = torch.mean(diff_boxes * mask_box)
+
+        loss = {}
+        loss['distill_rpn_box'] = box_loss
+        loss['distill_rpn_logits'] = logits_loss
         return loss
 
     @classmethod
@@ -177,16 +212,21 @@ def main(args):
     trainer.resume_or_load(resume=args.resume)
     return trainer.train()
 
+
+
+    data_loader = build_detection_train_loader(cfg)
+
+    inter_output = {}
+    for data in data_loader:
+        rpn_logits, rpn_proposals, loss_dict = model(data)
+        inter_output[data['file_name']] = {'rpn_logits': rpn_logits, 'rpn_proposals': rpn_proposals}
+        torch.save(inter_output, 'inter_output')
+        sys.exit(0)
+    
+
 if __name__ == "__main__":
     args = default_argument_parser().parse_known_args()[0]
     args.dist_url = 'tcp://127.0.0.1:{}'.format(randint(30000,50000))
     print("Command Line Args:", args)
 
-    launch(
-        main,
-        args.num_gpus,
-        num_machines=args.num_machines,
-        machine_rank=args.machine_rank,
-        dist_url=args.dist_url,
-        args=(args,),
-    )
+    main(args)

@@ -1,10 +1,7 @@
-import enum
 import os
 import logging
 from collections import OrderedDict
 from random import randint
-from urllib import response
-from detectron2.utils.collect_env import detect_compute_compatibility
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
 
@@ -19,25 +16,19 @@ import detectron2.utils.comm as comm
 
 from PIL import Image, ImageDraw
 from detectron2.data.detection_utils import convert_PIL_to_numpy
-import numpy as np
-import torch, sys, random, json, logging, time, cv2
-from torch.nn.parallel import DistributedDataParallel
-from detectron2.utils.logger import setup_logger
+import torch, sys, json, logging, time
 
 class Trainer(DefaultTrainer):
 
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        # Ein:
         self.memory = self.build_memory(cfg)
         self.t_model = self.build_model(cfg)
         self.t_model.load_state_dict(torch.load(cfg.MODEL.WEIGHTS)['model'])
+        self.t_model.eval()
 
     def run_step(self):
-
-        assert self.model.training, "[SimpleTrainer] model was changed to eval mode!"
-        start = time.perf_counter()
 
         '''
         data: file_name, image, instances(num_instances, image_height, image_width, fields=[gt_boxes, gt_classes])
@@ -45,21 +36,18 @@ class Trainer(DefaultTrainer):
         new_response: 20*512 , 4*512
         proposals: Instances() * 2000
         '''
+        assert self.model.training, "[SimpleTrainer] model was changed to eval mode!"
+        start = time.perf_counter()
+
         data = next(self._data_loader_iter)
         data_time = time.perf_counter() - start
 
         with torch.no_grad():
-            t_features, t_rpn_logits, t_rpn_proposals = self.t_model.get_distill_target(data)
+            distill_target = self.t_model.get_distill_target(data)
+        data[0].update(distill_target)
+
+        loss_dict = self.model(data)
         
-        self.model.set_distill_target(t_features, t_rpn_logits, t_rpn_proposals)
-        loss_dict, _ = self.model(data)
-
-        # distill_loss_dict = self.rpn_distill_losses(old_rpn_logits[0], old_rpn_proposals[0], rpn_logits[0], rpn_proposals[0])
-        # loss_dict.update(distill_loss_dict)
-
-        del t_features, t_rpn_logits, t_rpn_proposals
-        sys.exit(0)
-
         losses = sum(loss_dict.values())
         self.optimizer.zero_grad()
         losses.backward()
@@ -110,37 +98,6 @@ class Trainer(DefaultTrainer):
         res = cls.test(cfg, model, evaluators)
         res = OrderedDict({k + "_TTA": v for k, v in res.items()})
         return res
-    
-    @classmethod
-    def rpn_distill_losses(cls, old_rpn_logits, old_rpn_proposals, rpn_logits, rpn_proposals):
-        loss = {}
-        
-        #logits loss
-        filter_logits = torch.zeros(rpn_logits.shape).to('cuda')
-        diff_logits = torch.max(old_rpn_logits - rpn_logits, filter_logits) 
-        logits_loss = torch.mean(torch.mean(torch.mul(diff_logits, diff_logits)))
-
-        loss['dist_rpn_logits_loss'] = logits_loss
-
-        #box loss
-        mask_box = old_rpn_logits.clone()
-        mask_box[old_rpn_logits > rpn_logits] = 1
-        mask_box[old_rpn_logits <= rpn_logits] = 0
-        mask_box = mask_box.unsqueeze(dim = 2)
-
-        diff_boxes = old_rpn_proposals - rpn_proposals
-        diff_boxes = torch.mul(diff_boxes, mask_box)
-
-        box_loss = torch.mean(torch.mul(diff_boxes, diff_boxes)) 
-        loss['dist_rpn_box_loss'] = box_loss        
-
-        return loss
-
-    @classmethod
-    def feature_distill_losses(cls, old_feature, feature):
-
-        feature_distillation_loss = torch.abs(old_feature - feature)
-        return torch.mean(feature_distillation_loss)
 
 def setup(args):
     """

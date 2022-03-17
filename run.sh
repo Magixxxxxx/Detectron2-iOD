@@ -12,9 +12,22 @@ python mytrain.py --num-gpus 8 --config-file "myILOD/configs/emm.yaml" DATASETS.
 
 
 # distill
-python distill.py --num-gpus 1 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 1 OUTPUT_DIR './output/test'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 4 OUTPUT_DIR './output/test'
+
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/faster-ilod_b4_0.001_tf'
+
+python distill.py --num-gpus 4 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/faster-ilod_b8_0.001'
+
+python distill.py --num-gpus 1 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/faster-ilod_0.0005'
+
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/faster-ilod_0.001_b4'
+
+python distill.py --num-gpus 1 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.002 OUTPUT_DIR './output/faster-ilod_0.002'
+
 
 python myILOD/utils/get_inter_output.py --num-gpus 1 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 1 OUTPUT_DIR './output/test'
 
 python distill.py --num-gpus 4 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 4 OUTPUT_DIR './output/no_distill'
 
+
+python distill.py --num-gpus 4 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/test'

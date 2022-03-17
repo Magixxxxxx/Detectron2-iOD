@@ -450,10 +450,10 @@ class RPN(nn.Module):
         proposals = self.predict_proposals(
             anchors, pred_objectness_logits, pred_anchor_deltas, images.image_sizes
         )
-        return proposals, losses
+        return proposals, losses, pred_objectness_logits, pred_anchor_deltas
 
     # ZJW
-    def get_distill_target(self, images, features, gt_instances):
+    def get_distill_target(self, images, features):
         features = [features[f] for f in self.in_features]
         anchors = self.anchor_generator(features)
 
@@ -464,7 +464,6 @@ class RPN(nn.Module):
             score.permute(0, 2, 3, 1).flatten(1)
             for score in pred_objectness_logits
         ]
-
         pred_anchor_deltas = [
             # (N, A*B, Hi, Wi) -> (N, A, B, Hi, Wi) -> (N, Hi, Wi, A, B) -> (N, Hi*Wi*A, B)
             x.view(x.shape[0], -1, self.anchor_generator.box_dim, x.shape[-2], x.shape[-1])
@@ -476,7 +475,9 @@ class RPN(nn.Module):
         proposals = self.predict_proposals(
             anchors, pred_objectness_logits, pred_anchor_deltas, images.image_sizes
         )
-        return proposals, pred_objectness_logits, pred_anchor_deltas        
+
+        del images, features, anchors
+        return pred_objectness_logits, pred_anchor_deltas, proposals
 
     # TODO: use torch.no_grad when torchscript supports it.
     # https://github.com/pytorch/pytorch/pull/41371

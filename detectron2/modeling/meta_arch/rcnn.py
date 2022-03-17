@@ -1,5 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import logging
+import sys
 from urllib import response
 import numpy as np
 from typing import Optional, Tuple
@@ -17,6 +18,8 @@ from ..postprocessing import detector_postprocess
 from ..proposal_generator import build_proposal_generator
 from ..roi_heads import build_roi_heads
 from .build import META_ARCH_REGISTRY
+
+from . import distillation
 
 __all__ = ["GeneralizedRCNN", "ProposalNetwork"]
 
@@ -70,12 +73,6 @@ class GeneralizedRCNN(nn.Module):
         assert (
             self.pixel_mean.shape == self.pixel_std.shape
         ), f"{self.pixel_mean} and {self.pixel_std} have different shapes!"
-        
-        # ZJW
-        self.t_proposals = None
-        self.t_rpn_logits = None
-        self.t_features = None
-        self.t_rcn = None
 
     @classmethod
     def from_config(cls, cfg):
@@ -164,13 +161,12 @@ class GeneralizedRCNN(nn.Module):
         features = self.backbone(images.tensor)
 
         if self.proposal_generator:
-            proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+            proposals, proposal_losses, rpn_logits, rpn_boxes = self.proposal_generator(images, features, gt_instances)
         else:
             assert "proposals" in batched_inputs[0]
             proposals = [x["proposals"].to(self.device) for x in batched_inputs]
             proposal_losses = {}
 
-        
         _, detector_losses = self.roi_heads(images, features, proposals, gt_instances)
         if self.vis_period > 0:
             storage = get_event_storage()
@@ -182,12 +178,31 @@ class GeneralizedRCNN(nn.Module):
         losses.update(proposal_losses)
 
         # ZJW
-        if self.t_proposals:
-            distill_losses = {}
-            losses.update(distill_losses)
+        dt = batched_inputs[0]
+        if 't_features' in dt.keys():
 
-        del features
-        return losses, _
+            # rpn
+            # distill_rpn_losses = self.rpn_distill_losses(dt['t_rpn_logits'][0], dt['t_rpn_boxes'][0], rpn_logits[0], rpn_boxes[0])
+            distill_rpn_losses = distillation.calculate_rpn_distillation_loss((rpn_logits, rpn_boxes), (dt['t_rpn_logits'], dt['t_rpn_boxes']))
+            losses.update(distill_rpn_losses)
+
+            # feature
+            # distill_feature_losses = self.feature_distill_losses(dt['t_features'], features)
+            distill_feature_losses = distillation.calculate_feature_distillation_loss(features, dt['t_features'])
+            losses.update(distill_feature_losses)
+
+            # rcn
+            box_features = self.roi_heads._shared_roi_transform(
+                [features["res4"]], dt['rcn_input_proposals']
+            )
+            rcn_cls, rcn_reg = self.roi_heads.box_predictor(box_features.mean(dim=[2, 3]))
+
+            distill_rcn_losses = self.rcn_distill_losses(dt['t_rcn_cls'], dt['t_rcn_reg'], rcn_cls, rcn_reg)
+            losses.update(distill_rcn_losses)
+
+            del box_features, rcn_cls, rcn_reg, rpn_logits, rpn_boxes
+        
+        return losses
 
     def inference(self, batched_inputs, detected_instances=None, do_postprocess=True):
         """
@@ -256,23 +271,83 @@ class GeneralizedRCNN(nn.Module):
     #ZJW
     def get_distill_target(self, batched_inputs):
 
-        images = self.preprocess_image(batched_inputs)
+        distill_target = {}
 
-        gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
+        images = self.preprocess_image(batched_inputs)
 
         features = self.backbone(images.tensor)
 
-        proposals, rpn_logits, rpn_proposals = self.proposal_generator.get_distill_target(images, features, gt_instances)
+        pred_objectness_logits, pred_anchor_deltas, proposals = self.proposal_generator.get_distill_target(images, features)
 
-        return features, rpn_logits, rpn_proposals
+        rcn_input_proposals, rcn_cls, rcn_reg = self.roi_heads.get_distill_target(features, proposals)
 
-    def set_distill_target(self, t_features, t_rpn_proposals, t_rpn_logits):
-        self.t_features = t_features
-        self.t_proposals = t_rpn_proposals
-        self.t_rpn_logits = t_rpn_logits
+        distill_target['t_features'] = features
+        distill_target['t_rpn_logits'] = pred_objectness_logits
+        distill_target['t_rpn_boxes'] = pred_anchor_deltas
+        distill_target['rcn_input_proposals'] = rcn_input_proposals
+        distill_target['t_rcn_cls'] = rcn_cls
+        distill_target['t_rcn_reg'] = rcn_reg
 
-    def distill_rpn():
-        return 
+        return distill_target
+
+    def rpn_distill_losses(self, t_rpn_logits, t_rpn_proposals, rpn_logits, rpn_proposals):
+
+        loss = {}
+
+        #logits loss
+        filter_logits = torch.zeros(rpn_logits.shape).to('cuda')
+        diff_logits = torch.max(t_rpn_logits - rpn_logits, filter_logits) 
+        logits_loss = torch.mul(diff_logits, diff_logits)
+
+        #box loss
+        mask_box = t_rpn_logits.clone()
+        mask_box[t_rpn_logits > rpn_logits] = 1
+        mask_box[t_rpn_logits <= rpn_logits] = 0
+        mask_box = mask_box.unsqueeze(dim = 2)
+
+        diff_boxes = t_rpn_proposals - rpn_proposals
+        diff_boxes = torch.mul(diff_boxes, mask_box)
+
+        box_loss = torch.mul(diff_boxes, diff_boxes)
+        
+        loss['dist_rpn_loss'] = (box_loss + logits_loss) / len(t_rpn_logits)
+
+        del t_rpn_logits, t_rpn_proposals, rpn_logits, rpn_proposals, filter_logits, diff_boxes, diff_logits, mask_box
+        return loss
+
+    def rcn_distill_losses(self, t_rcn_cls, t_rcn_reg, rcn_cls, rcn_reg):
+        '''
+        t_rcn_cls: tensor(rand_k * 21)
+        '''
+        loss = {}
+
+        t_rcn_cls = nn.functional.softmax(t_rcn_cls[:, :15], dim = 1)
+        rcn_cls = nn.functional.softmax(rcn_cls[:, :15], dim = 1)
+
+        #logits loss
+        l2_loss = nn.MSELoss(size_average=False, reduce=False)
+        logits_loss = l2_loss(rcn_cls, t_rcn_cls)
+        logits_loss = torch.mean(logits_loss)  # average towards categories and proposal
+
+        #box loss
+        box_loss = l2_loss(t_rcn_reg, rcn_reg)
+        box_loss = torch.mean(box_loss)
+
+        loss['dist_rcn_loss'] = torch.add(box_loss, logits_loss)
+
+        del t_rcn_cls, t_rcn_reg, rcn_cls, rcn_reg
+        return loss
+
+    def feature_distill_losses(self, t_feature, feature):
+        loss = {}
+        t_feature = t_feature['res4'] 
+        feature = feature['res4']
+        filter_feature = torch.zeros(t_feature.shape).to('cuda')
+        feature_distillation_loss = torch.max(t_feature - feature, filter_feature)
+        loss['dist_feature_loss'] = torch.mean(feature_distillation_loss)
+
+        del t_feature, feature, filter_feature
+        return loss
 
 @META_ARCH_REGISTRY.register()
 class ProposalNetwork(nn.Module):

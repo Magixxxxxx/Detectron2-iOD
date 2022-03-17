@@ -419,12 +419,13 @@ class Res5ROIHeads(ROIHeads):
         features['res4'].shape: [1, 1024, 30, 40]
 
         proposals: 
-            2000 * instance(box: 4 * 2000 , objectness_logits: 512)  
+            2000 * instance(proposal_boxes: 4 * 2000 , objectness_logits: 2000)  
                 randperm--->  
-            512 * instance(box: 4 * 512 , objectness_logits: 512)
+            512 * instance(proposal_boxes: 4 * 512 , objectness_logits: 512)
         targets:
         proposal_boxes: 512 * instance(box: 512 *4 , objectness_logits: 512, gt_classes: 512)
         box_features: 512 *7 *7 
+        predictions: (tensor n * 21, tensor n *4)
         """
 
         if self.training:
@@ -439,7 +440,7 @@ class Res5ROIHeads(ROIHeads):
             [features[f] for f in self.in_features], proposal_boxes
         )
         predictions = self.box_predictor(box_features.mean(dim=[2, 3]))
-
+        
         if self.training:
             del features
             losses = self.box_predictor.losses(predictions, proposals)
@@ -455,7 +456,7 @@ class Res5ROIHeads(ROIHeads):
                 del box_features
                 losses.update(self.mask_head(mask_features, proposals))
             # ZJW
-            return _, losses 
+            return {}, losses 
         else:
             pred_instances, _ = self.box_predictor.inference(predictions, proposals)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)
@@ -485,6 +486,26 @@ class Res5ROIHeads(ROIHeads):
         else:
             return instances
 
+    def get_distill_target(self, features, proposals):
+
+        rpn_boxes, rpn_logits = [x.proposal_boxes for x in proposals], [x.objectness_logits for x in proposals]
+        top_k = 128
+        rand_k = 64
+
+        rcn_input_proposals = []
+        for x, y in zip(rpn_boxes, rpn_logits):
+            _, idxs = torch.sort(y, descending=True)
+            top_pro = x[idxs[:top_k]]
+            rand_idx = torch.randperm(top_k, device='cuda')[:rand_k]
+            rcn_input_proposals.append(top_pro[rand_idx])
+
+        box_features = self._shared_roi_transform(
+            [features[f] for f in self.in_features], rcn_input_proposals
+        )
+        rcn_cls, rcn_reg = self.box_predictor(box_features.mean(dim=[2, 3]))
+
+        del box_features, features, proposals
+        return rcn_input_proposals, rcn_cls ,rcn_reg
 
 @ROI_HEADS_REGISTRY.register()
 class StandardROIHeads(ROIHeads):

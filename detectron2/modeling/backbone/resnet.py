@@ -420,6 +420,7 @@ class ResNet(Backbone):
             assert out_feature in children, "Available children: {}".format(", ".join(children))
 
     def forward(self, x):
+        
         """
         Args:
             x: Tensor of shape (N,C,H,W). H, W must be a multiple of ``self.size_divisibility``.
@@ -430,6 +431,7 @@ class ResNet(Backbone):
         assert x.dim() == 4, f"ResNet takes an input of shape (N, C, H, W). Got {x.shape} instead!"
         outputs = {}
         x = self.stem(x)
+
         if "stem" in self._out_features:
             outputs["stem"] = x
         for stage, name in self.stages_and_names:
@@ -442,7 +444,9 @@ class ResNet(Backbone):
             x = self.linear(x)
             if "linear" in self._out_features:
                 outputs["linear"] = x
+
         return outputs
+
 
     def output_shape(self):
         return {

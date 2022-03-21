@@ -500,11 +500,6 @@ _C.MODEL.RESNETS.DEFORM_NUM_GROUPS = 1
 # ---------------------------------------------------------------------------- #
 _C.SOLVER = CN()
 
-# TODO:ILOD configs
-
-_C.SOLVER.OPTIM = 'SGD'
-_C.SOLVER.MASK_LR = 0.00001
-
 # See detectron2/solver/build.py for LR scheduler options
 _C.SOLVER.LR_SCHEDULER_NAME = "WarmupMultiStepLR"
 
@@ -623,3 +618,9 @@ _C.GLOBAL = CN()
 _C.GLOBAL.HACK = 1.0
 
 
+# TODO:ILOD configs
+
+_C.SOLVER.OPTIM = 'SGD'
+_C.SOLVER.MASK_LR = 0.00001
+
+_C.MODEL.DISTILL = "DistillRCNN"

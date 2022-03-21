@@ -61,6 +61,7 @@ class Conv2d(torch.nn.Conv2d):
         self.activation = activation
 
     def forward(self, x):
+
         if x.numel() == 0 and self.training:
             # https://github.com/pytorch/pytorch/issues/12013
             assert not isinstance(
@@ -92,10 +93,13 @@ class Conv2d(torch.nn.Conv2d):
                 return empty
 
         x = super().forward(x)
+
         if self.norm is not None:
             x = self.norm(x)
+        
         if self.activation is not None:
             x = self.activation(x)
+
         return x
 
 

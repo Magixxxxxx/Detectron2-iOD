@@ -4,7 +4,7 @@ MODEL:
   ROI_HEADS:
     NUM_CLASSES: 20
   ROI_BOX_HEAD:
-    CLS_AGNOSTIC_BBOX_REG: True
+    CLS_AGNOSTIC_BBOX_REG: False
 DATASETS:
   TRAIN: ('voc_2007_trainval', )
   TEST: ('voc_2007_test', )

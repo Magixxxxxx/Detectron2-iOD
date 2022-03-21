@@ -39,7 +39,6 @@ def register_dataset():
     purpose: register all splits of dataset with PREDEFINED_SPLITS_DATASET
     """
     for name, (image_root, json_file) in PREDEFINED_SPLITS_DATASET.items():
-        print(name)
 
         DatasetCatalog.register(name, lambda: load_coco_json(json_file, image_root, name))
         MetadataCatalog.get(name).set(json_file=json_file, 

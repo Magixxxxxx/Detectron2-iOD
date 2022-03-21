@@ -2,6 +2,7 @@ import os
 import logging
 from collections import OrderedDict
 from random import randint
+from detectron2.modeling.meta_arch.build import build_model
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
 
@@ -20,14 +21,6 @@ import torch, sys, json, logging, time
 
 class Trainer(DefaultTrainer):
 
-    def __init__(self, cfg):
-        super().__init__(cfg)
-
-        self.memory = self.build_memory(cfg)
-        self.t_model = self.build_model(cfg)
-        self.t_model.load_state_dict(torch.load(cfg.MODEL.WEIGHTS)['model'])
-        self.t_model.eval()
-
     def run_step(self):
 
         '''
@@ -42,12 +35,8 @@ class Trainer(DefaultTrainer):
         data = next(self._data_loader_iter)
         data_time = time.perf_counter() - start
 
-        with torch.no_grad():
-            distill_target = self.t_model.get_distill_target(data)
-        data[0].update(distill_target)
-
         loss_dict = self.model(data)
-        
+
         losses = sum(loss_dict.values())
         self.optimizer.zero_grad()
         losses.backward()
@@ -71,10 +60,6 @@ class Trainer(DefaultTrainer):
             return memory_dict
         else:
             return None
-
-    @classmethod
-    def build_train_loader(cls, cfg):
-        return super().build_train_loader(cfg)
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
@@ -128,10 +113,8 @@ def main(args):
             verify_results(cfg, res)
         return res
     
-    model = Trainer.build_model(cfg) 
-
     trainer = Trainer(cfg)
-    trainer.resume_or_load(resume=args.resume)
+    # trainer.resume_or_load(resume=args.resume)
     return trainer.train()
 
 if __name__ == "__main__":

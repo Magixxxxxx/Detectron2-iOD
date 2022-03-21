@@ -2,6 +2,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
 import logging
+from cv2 import mean
 import numpy as np
 import os
 import tempfile
@@ -109,6 +110,7 @@ class PascalVOCDetectionEvaluator(DatasetEvaluator):
         mAP = {iou: np.mean(x) for iou, x in aps.items()}
         ret["bbox"] = {"AP": np.mean(list(mAP.values())), "AP50": mAP[50], "AP75": mAP[75]}
         ret["perclass_ap50"] = {cls_name:aps[50][cls_id] for cls_id, cls_name in enumerate(self._class_names)}
+        ret["2step"] = {'old': np.mean(aps[50][:15]), 'new':np.mean(aps[50][15:])}
         return ret
 
 

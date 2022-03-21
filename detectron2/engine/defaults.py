@@ -10,6 +10,7 @@ since they are meant to represent the "common default behavior" people need in t
 """
 
 import argparse
+from email.policy import strict
 import logging
 import os
 import sys
@@ -32,7 +33,7 @@ from detectron2.evaluation import (
     print_csv_format,
     verify_results,
 )
-from detectron2.modeling import build_model
+from detectron2.modeling import build_model, build_distill_model
 from detectron2.solver import build_lr_scheduler, build_optimizer
 from detectron2.utils import comm
 from detectron2.utils.collect_env import collect_env_info
@@ -270,14 +271,21 @@ class DefaultTrainer(SimpleTrainer):
             setup_logger()
         cfg = DefaultTrainer.auto_scale_workers(cfg, comm.get_world_size())
         # Assume these objects must be constructed in this order.
-        model = self.build_model(cfg)
+        model = build_distill_model(cfg)
         optimizer = self.build_optimizer(cfg, model)
         data_loader = self.build_train_loader(cfg)
+
+        sd = torch.load(cfg.MODEL.WEIGHTS, map_location='cpu')['model']  
+
+        model.load_state_dict(sd, strict = False)
+        if model.t_model:
+            model.t_model.load_state_dict(sd)
 
         # For training, wrap with DDP. But don't need this for inference.
         if comm.get_world_size() > 1:
             model = DistributedDataParallel(
                 model, device_ids=[comm.get_local_rank()], broadcast_buffers=False
+                ,find_unused_parameters=True,
             )
         super().__init__(model, data_loader, optimizer)
 
@@ -297,6 +305,7 @@ class DefaultTrainer(SimpleTrainer):
         self.cfg = cfg
 
         self.register_hooks(self.build_hooks())
+
 
     def resume_or_load(self, resume=True):
         """
@@ -418,11 +427,6 @@ class DefaultTrainer(SimpleTrainer):
         logger = logging.getLogger(__name__)
         logger.info("Model:\n{}".format(model))
         return model
-
-    @classmethod
-    def build_memory(cls, cfg):
-        memory_dict = {}
-        return memory_dict
 
     @classmethod
     def build_optimizer(cls, cfg, model):

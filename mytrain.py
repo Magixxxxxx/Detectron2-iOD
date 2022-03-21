@@ -24,11 +24,7 @@ class Trainer(DefaultTrainer):
 
         self.t_model = self.build_model(cfg)
         self.t_model.load_state_dict(torch.load(cfg.MODEL.WEIGHTS)['model'])
-        from torch.nn.parallel import DistributedDataParallel
-        if comm.get_world_size() > 1:
-            self.t_model = DistributedDataParallel(
-                self.t_model, device_ids=[comm.get_local_rank()], broadcast_buffers=False
-            )
+        self.t_model.eval()
 
     def run_step(self):
 
@@ -38,8 +34,7 @@ class Trainer(DefaultTrainer):
 
         data_time = time.perf_counter() - start
 
-        with torch.no_grad():
-            distill_target = self.t_model.get_distill_target(data)
+        distill_target = self.t_model.get_distill_target(data)
         data[0].update(distill_target)
 
         loss_dict = self.model(data)

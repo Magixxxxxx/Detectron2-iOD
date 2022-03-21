@@ -21,6 +21,7 @@ from .meta_arch import (
     RetinaNet,
     SemanticSegmentor,
     build_model,
+    build_distill_model,
     build_sem_seg_head,
 )
 from .postprocessing import detector_postprocess

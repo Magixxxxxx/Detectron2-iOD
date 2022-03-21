@@ -383,9 +383,8 @@ class DistillRCNN(nn.Module):
     @classmethod
     def from_config(cls, cfg):
         backbone = build_backbone(cfg)
-        t_model = None
-        # t_model = build_model(cfg)
-        # t_model.requires_grad_(False)
+        t_model = build_model(cfg)
+        t_model.requires_grad_(False)
 
         return {
             "backbone": backbone,
@@ -489,29 +488,29 @@ class DistillRCNN(nn.Module):
         losses.update(proposal_losses)
 
         # ZJW
-        # with torch.no_grad(): dt = self.t_model.get_distill_target(batched_inputs)
+        with torch.no_grad(): dt = self.t_model.get_distill_target(batched_inputs)
 
         # rpn
-        # #distill_rpn_losses = self.rpn_distill_losses(dt['t_rpn_logits'][0], dt['t_rpn_boxes'][0], rpn_logits[0], rpn_boxes[0])
-        # distill_rpn_losses = distillation.calculate_rpn_distillation_loss((rpn_logits, rpn_boxes), (dt['t_rpn_logits'], dt['t_rpn_boxes']))
-        # losses.update(distill_rpn_losses)
+        #distill_rpn_losses = self.rpn_distill_losses(dt['t_rpn_logits'][0], dt['t_rpn_boxes'][0], rpn_logits[0], rpn_boxes[0])
+        distill_rpn_losses = distillation.calculate_rpn_distillation_loss((rpn_logits, rpn_boxes), (dt['t_rpn_logits'], dt['t_rpn_boxes']))
+        losses.update(distill_rpn_losses)
 
-        # # feature
-        # # distill_feature_losses = self.feature_distill_losses(dt['t_features'], features)
-        # distill_feature_losses = distillation.calculate_feature_distillation_loss(features, dt['t_features'])
-        # losses.update(distill_feature_losses)
+        # feature
+        # distill_feature_losses = self.feature_distill_losses(dt['t_features'], features)
+        distill_feature_losses = distillation.calculate_feature_distillation_loss(features, dt['t_features'])
+        losses.update(distill_feature_losses)
 
-        # # rcn
-        # box_features = self.roi_heads._shared_roi_transform(
-        #     [features["res4"]], dt['rcn_input_proposals']
-        # )
-        # rcn_cls, rcn_reg = self.roi_heads.box_predictor(box_features.mean(dim=[2, 3]))
+        # rcn
+        box_features = self.roi_heads._shared_roi_transform(
+            [features["res4"]], dt['rcn_input_proposals']
+        )
+        rcn_cls, rcn_reg = self.roi_heads.box_predictor(box_features.mean(dim=[2, 3]))
 
-        # # distill_rcn_losses = self.rcn_distill_losses(dt['t_rcn_cls'], dt['t_rcn_reg'], rcn_cls, rcn_reg)
-        # distill_rcn_losses = distillation.calculate_roi_distillation_loss(dt['t_rcn_cls'], dt['t_rcn_reg'], rcn_cls, rcn_reg )
-        # losses.update(distill_rcn_losses)
+        # distill_rcn_losses = self.rcn_distill_losses(dt['t_rcn_cls'], dt['t_rcn_reg'], rcn_cls, rcn_reg)
+        distill_rcn_losses = distillation.calculate_roi_distillation_loss(dt['t_rcn_cls'], dt['t_rcn_reg'], rcn_cls, rcn_reg )
+        losses.update(distill_rcn_losses)
 
-        # del dt, rcn_cls, rcn_reg, box_features, features, images
+        del dt, rcn_cls, rcn_reg, box_features, features, images
         return losses
 
     def inference(self, batched_inputs, detected_instances=None, do_postprocess=True):

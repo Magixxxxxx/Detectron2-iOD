@@ -1,8 +1,12 @@
+import copy
 import os
 import logging
 from collections import OrderedDict
 from random import randint
-from detectron2.modeling.meta_arch.build import build_model
+from detectron2.data.build import build_batch_data_loader, get_detection_dataset_dicts
+from detectron2.data.common import DatasetFromList, MapDataset
+from detectron2.data.dataset_mapper import DatasetMapper
+from detectron2.data.samplers.distributed_sampler import TrainingSampler
 import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
 
@@ -17,10 +21,34 @@ import detectron2.utils.comm as comm
 
 from PIL import Image, ImageDraw
 from detectron2.data.detection_utils import convert_PIL_to_numpy
-import torch, sys, json, logging, time
+import torch, sys, logging, time
+
+def filter_classes_instances(dataset_dicts, valid_classes):
+
+    logger = logging.getLogger(__name__)
+    logger.info("Valid classes: " + str(valid_classes))
+    logger.info("Removing objects ...")
+
+    for entry in copy.copy(dataset_dicts):
+        annos = entry["annotations"]
+        for annotation in copy.copy(annos):
+            if annotation["category_id"] not in valid_classes:
+                annos.remove(annotation)
+        if len(annos) == 0:
+            dataset_dicts.remove(entry)
+
+    return dataset_dicts
 
 class Trainer(DefaultTrainer):
 
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+        sd = torch.load(cfg.MODEL.WEIGHTS, map_location='cpu')['model']  # why map_location leads to cruption
+        self.model.module.load_state_dict(sd, strict = False)
+        if self.model.module.t_model:
+            self.model.module.t_model.load_state_dict(sd)        
+    
     def run_step(self):
 
         '''
@@ -53,13 +81,44 @@ class Trainer(DefaultTrainer):
         self.optimizer.step()
 
     @classmethod
-    def build_memory(cls, cfg):
-        if cfg.DATASETS.MEMORY:
-            with open(cfg.DATASETS.MEMORY) as f:
-                memory_dict = dict(json.load(f))
-            return memory_dict
-        else:
-            return None
+    def build_train_loader(cls, cfg):
+        dataset_dicts = get_detection_dataset_dicts(
+            cfg.DATASETS.TRAIN,
+            filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
+            min_keypoints=cfg.MODEL.ROI_KEYPOINT_HEAD.MIN_KEYPOINTS_PER_IMAGE
+            if cfg.MODEL.KEYPOINT_ON
+            else 0,
+            proposal_files=cfg.DATASETS.PROPOSAL_FILES_TRAIN if cfg.MODEL.LOAD_PROPOSALS else None,
+        )
+
+        # ZJW
+        valid_classes = range(cfg.IOD.OLD_CLS, cfg.IOD.OLD_CLS + cfg.IOD.NEW_CLS)
+        dataset_dicts = filter_classes_instances(dataset_dicts, valid_classes)
+        if cfg.IOD.MEMORY:
+            dataset_dicts += get_detection_dataset_dicts(
+                cfg.IOD.MEMORY,
+                filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
+                min_keypoints=0,
+                proposal_files=cfg.DATASETS.PROPOSAL_FILES_TRAIN if cfg.MODEL.LOAD_PROPOSALS else None
+                )
+        
+        dataset = DatasetFromList(dataset_dicts, copy=False)
+        mapper = DatasetMapper(cfg, True)
+        dataset = MapDataset(dataset, mapper)
+
+        sampler_name = cfg.DATALOADER.SAMPLER_TRAIN
+        logger = logging.getLogger(__name__)
+        logger.info("Using training sampler {}".format(sampler_name))
+        
+        sampler = TrainingSampler(len(dataset))
+
+        return build_batch_data_loader(
+            dataset,
+            sampler,
+            cfg.SOLVER.IMS_PER_BATCH,
+            aspect_ratio_grouping=cfg.DATALOADER.ASPECT_RATIO_GROUPING,
+            num_workers=cfg.DATALOADER.NUM_WORKERS,
+        )
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
@@ -101,20 +160,16 @@ def main(args):
     my_register()
 
     cfg = setup(args)
-    
     if args.eval_only:
         model = Trainer.build_model(cfg)
-
         DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
             cfg.MODEL.WEIGHTS, resume=args.resume
         )
         res = Trainer.test(cfg, model)
-        if comm.is_main_process():
-            verify_results(cfg, res)
+        if comm.is_main_process(): verify_results(cfg, res)
         return res
     
     trainer = Trainer(cfg)
-    # trainer.resume_or_load(resume=args.resume)
     return trainer.train()
 
 if __name__ == "__main__":

@@ -25,4 +25,6 @@ python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" DATAS
 
 
 # 实验
-python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_agnostic.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/b4_0.0005'
+python distill.py --num-gpus 4 --config-file "myILOD/configs/distill_agnostic.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/ag'
+
+python distill.py --num-gpus 4 --config-file "myILOD/configs/distill_agnostic.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/noag'

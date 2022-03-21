@@ -275,12 +275,6 @@ class DefaultTrainer(SimpleTrainer):
         optimizer = self.build_optimizer(cfg, model)
         data_loader = self.build_train_loader(cfg)
 
-        sd = torch.load(cfg.MODEL.WEIGHTS, map_location='cpu')['model']  
-
-        model.load_state_dict(sd, strict = False)
-        if model.t_model:
-            model.t_model.load_state_dict(sd)
-
         # For training, wrap with DDP. But don't need this for inference.
         if comm.get_world_size() > 1:
             model = DistributedDataParallel(

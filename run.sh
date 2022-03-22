@@ -16,7 +16,7 @@ python mytrain.py --num-gpus 8 --config-file "myILOD/configs/emm.yaml" DATASETS.
 # distill
 
 # 单卡
-python distill.py --num-gpus 1 --config-file "myILOD/configs/distill_agnostic.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0002 OUTPUT_DIR './output/test'
+python distill.py --num-gpus 1 --config-file "myILOD/configs/distill.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5  SOLVER.IMS_PER_BATCH 1 SOLVER.BASE_LR 0.0002 OUTPUT_DIR './output/test'
 
 # 多卡测试
 python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_agnostic.yaml" DATASETS.TRAIN "('[16,20]_train.json', )" SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/default'
@@ -27,4 +27,24 @@ python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" DATAS
 # 实验
 python distill.py --num-gpus 4 --config-file "myILOD/configs/distill_agnostic.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/ag'
 
-python distill.py --num-gpus 4 --config-file "myILOD/configs/distill_agnostic.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/noag'
+
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0002 OUTPUT_DIR './output/b2_ag_0002'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/b2_ag_0001'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0002 OUTPUT_DIR './output/b4_ag_0002'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/b4_ag_0005'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/b4_ag_001'
+
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_agnostic.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0002 OUTPUT_DIR './output/b2_0002'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_agnostic.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/b2_0005'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_agnostic.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0002 OUTPUT_DIR './output/b4_0002'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_agnostic.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/b4_0005'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_agnostic.yaml" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/b4_001'
+
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('voc_2007_trainval', )" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/b2_0005_trainval'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill.yaml" DATASETS.TRAIN "('voc_2007_train', )" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/b2_0005_train'
+# eval
+python distill.py --num-gpus 4 --eval-only --config-file "myILOD/configs/distill_agnostic.yaml" MODEL.WEIGHTS "output/b4_0005/model_0003999.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/eval'
+
+
+
+python distill.py --config-file "myILOD/configs/firststep.yaml"

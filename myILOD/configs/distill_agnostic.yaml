@@ -8,7 +8,7 @@ MODEL:
 DATALOADER:
   NUM_WORKERS: 4
 DATASETS:
-  TRAIN: ('voc_2007_train', )
+  TRAIN: ('voc_2007_trainval', )
   TEST: ('voc_2007_test', )
 SOLVER:
   IMS_PER_BATCH: 8
@@ -19,5 +19,7 @@ SOLVER:
   CHECKPOINT_PERIOD: 1000
 TEST:
   EVAL_PERIOD: 1000
+IOD:
+  DISTILL: True
 OUTPUT_DIR: './output/distill'
 SEED: 8888

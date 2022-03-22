@@ -36,19 +36,22 @@ def filter_classes_instances(dataset_dicts, valid_classes):
                 annos.remove(annotation)
         if len(annos) == 0:
             dataset_dicts.remove(entry)
-
     return dataset_dicts
 
 class Trainer(DefaultTrainer):
 
     def __init__(self, cfg):
         super().__init__(cfg)
+        
+        if comm.get_world_size() > 1:
+            md = self.model.module
+        if cfg.IOD.DISTILL:
+            sd = torch.load(cfg.MODEL.WEIGHTS, map_location='cpu')['model']  # why map_location leads to cruption
+            md.load_state_dict(sd, strict = False)
+            md.t_model.load_state_dict(sd)        
+        else:
+            self.resume_or_load()
 
-        sd = torch.load(cfg.MODEL.WEIGHTS, map_location='cpu')['model']  # why map_location leads to cruption
-        self.model.module.load_state_dict(sd, strict = False)
-        if self.model.module.t_model:
-            self.model.module.t_model.load_state_dict(sd)        
-    
     def run_step(self):
 
         '''
@@ -64,7 +67,14 @@ class Trainer(DefaultTrainer):
         data_time = time.perf_counter() - start
 
         loss_dict = self.model(data)
+        # loss_dict['loss_cls'] *= 2
+        # loss_dict['loss_box_reg'] *= 2
+        # loss_dict['loss_rpn_cls'] *= 2
+        # loss_dict['loss_rpn_loc'] *= 2
 
+        # loss_dict['dist_rpn_loss'] *= 2
+        # loss_dict['dist_feature_loss'] *= 2
+        # loss_dict['distill_rcn_loss'] *= 2
         losses = sum(loss_dict.values())
         self.optimizer.zero_grad()
         losses.backward()
@@ -92,8 +102,12 @@ class Trainer(DefaultTrainer):
         )
 
         # ZJW
-        valid_classes = range(cfg.IOD.OLD_CLS, cfg.IOD.OLD_CLS + cfg.IOD.NEW_CLS)
+        print(len(dataset_dicts))
+        # valid_classes = range(cfg.IOD.OLD_CLS, cfg.IOD.OLD_CLS + cfg.IOD.NEW_CLS)
+        valid_classes = range(cfg.IOD.OLD_CLS)
         dataset_dicts = filter_classes_instances(dataset_dicts, valid_classes)
+        print(len(dataset_dicts))
+
         if cfg.IOD.MEMORY:
             dataset_dicts += get_detection_dataset_dicts(
                 cfg.IOD.MEMORY,
@@ -119,6 +133,24 @@ class Trainer(DefaultTrainer):
             aspect_ratio_grouping=cfg.DATALOADER.ASPECT_RATIO_GROUPING,
             num_workers=cfg.DATALOADER.NUM_WORKERS,
         )
+    
+    @classmethod
+    def build_model(cls, cfg):
+        """
+        Returns:
+            torch.nn.Module:
+
+        It now calls :func:`detectron2.modeling.build_model`.
+        Overwrite it if you'd like a different model.
+        """
+        from detectron2.modeling import build_distill_model, build_model
+        if cfg.IOD.DISTILL:
+            model = build_distill_model(cfg)
+        else:
+            model = build_model(cfg)
+        logger = logging.getLogger(__name__)
+        logger.info("Model:\n{}".format(model))
+        return model
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):

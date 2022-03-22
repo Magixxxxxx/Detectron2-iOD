@@ -629,3 +629,4 @@ _C.IOD = CN()
 _C.IOD.MEMORY = ''
 _C.IOD.OLD_CLS = 15
 _C.IOD.NEW_CLS = 5
+_C.IOD.DISTILL = True

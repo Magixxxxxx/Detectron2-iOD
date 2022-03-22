@@ -38,6 +38,7 @@ class Trainer(DefaultTrainer):
         data[0].update(distill_target)
 
         loss_dict = self.model(data)
+
         losses = sum(loss_dict.values())
         
         self.optimizer.zero_grad()
@@ -53,17 +54,6 @@ class Trainer(DefaultTrainer):
             self._detect_anomaly(losses, loss_dict)
 
         self.optimizer.step()
-
-    @classmethod
-    def build_memory(cls, cfg):
-        if cfg.DATASETS.MEMORY:
-            print("replay memory on ————————")
-            with open(cfg.DATASETS.MEMORY) as f:
-                memory_dict = dict(json.load(f))
-            return memory_dict
-        else:
-            print("replay memory off ————————")
-            return None
 
     @classmethod
     def build_train_loader(cls, cfg):

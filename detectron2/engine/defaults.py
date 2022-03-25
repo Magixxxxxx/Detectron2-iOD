@@ -10,7 +10,6 @@ since they are meant to represent the "common default behavior" people need in t
 """
 
 import argparse
-from email.policy import strict
 import logging
 import os
 import sys
@@ -33,7 +32,7 @@ from detectron2.evaluation import (
     print_csv_format,
     verify_results,
 )
-from detectron2.modeling import build_model, build_distill_model
+from detectron2.modeling import build_model
 from detectron2.solver import build_lr_scheduler, build_optimizer
 from detectron2.utils import comm
 from detectron2.utils.collect_env import collect_env_info

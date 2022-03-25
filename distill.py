@@ -45,6 +45,9 @@ class Trainer(DefaultTrainer):
         
         if comm.get_world_size() > 1:
             md = self.model.module
+        else:
+            md = self.model
+            
         if cfg.IOD.DISTILL:
             sd = torch.load(cfg.MODEL.WEIGHTS, map_location='cpu')['model']  # why map_location leads to cruption
             md.load_state_dict(sd, strict = False)
@@ -103,19 +106,22 @@ class Trainer(DefaultTrainer):
 
         # ZJW
         print(len(dataset_dicts))
-        # valid_classes = range(cfg.IOD.OLD_CLS, cfg.IOD.OLD_CLS + cfg.IOD.NEW_CLS)
-        valid_classes = range(cfg.IOD.OLD_CLS)
+        if cfg.IOD.DISTILL:
+            valid_classes = range(cfg.IOD.OLD_CLS, cfg.IOD.OLD_CLS + cfg.IOD.NEW_CLS)
+        else:
+            valid_classes = range(cfg.IOD.OLD_CLS)
         dataset_dicts = filter_classes_instances(dataset_dicts, valid_classes)
-        print(len(dataset_dicts))
-
+        
         if cfg.IOD.MEMORY:
-            dataset_dicts += get_detection_dataset_dicts(
+            memory =  get_detection_dataset_dicts(
                 cfg.IOD.MEMORY,
                 filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
                 min_keypoints=0,
                 proposal_files=cfg.DATASETS.PROPOSAL_FILES_TRAIN if cfg.MODEL.LOAD_PROPOSALS else None
                 )
-        
+            for m in memory: m['memory'] = True
+            dataset_dicts += memory   
+        print(len(dataset_dicts))
         dataset = DatasetFromList(dataset_dicts, copy=False)
         mapper = DatasetMapper(cfg, True)
         dataset = MapDataset(dataset, mapper)

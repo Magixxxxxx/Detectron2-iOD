@@ -256,13 +256,30 @@ class GeneralizedRCNN(nn.Module):
         distill_target['t_rpn_logits'] = pred_objectness_logits
         distill_target['t_rpn_boxes'] = pred_anchor_deltas
 
-        rcn_input_proposals, rcn_cls, rcn_reg = self.roi_heads.get_distill_target(features, proposals)
+        rcn_input_proposals, box_features, rcn_cls, rcn_reg = self.roi_heads.get_distill_target(features, proposals)
         distill_target['rcn_input_proposals'] = rcn_input_proposals
         distill_target['t_rcn_cls'] = rcn_cls
         distill_target['t_rcn_reg'] = rcn_reg
+        distill_target['box_features'] = box_features
+        
+        return distill_target
 
-        del images, features, pred_objectness_logits, pred_anchor_deltas, proposals, rcn_input_proposals, rcn_cls, rcn_reg
-        torch.cuda.empty_cache()
+    def get_distill_target_meta(self, batched_inputs, new_features, new_proposals):
+
+        distill_target = {}
+
+        # feature
+        images = self.preprocess_image(batched_inputs)
+        features = self.backbone(images.tensor)
+        distill_target['t_features'] = features
+
+        # rcn
+        box_features, rcn_cls, rcn_reg = self.roi_heads.get_distill_target_meta(new_features, new_proposals)
+
+        distill_target['t_rcn_cls'] = rcn_cls
+        distill_target['t_rcn_reg'] = rcn_reg
+        distill_target['box_features'] = box_features
+        
         return distill_target
 
 
@@ -490,7 +507,7 @@ class DistillRCNN(nn.Module):
         losses.update(proposal_losses)
 
         # ZJW
-        with torch.no_grad(): dt = self.t_model.get_distill_target(batched_inputs)
+        with torch.no_grad(): dt = self.t_model.get_distill_target_meta(batched_inputs, features, proposals)
 
         # rpn
         # distill_rpn_losses = self.rpn_distill_losses(dt['t_rpn_logits'][0], dt['t_rpn_boxes'][0], rpn_logits[0], rpn_boxes[0])
@@ -509,8 +526,11 @@ class DistillRCNN(nn.Module):
         rcn_cls, rcn_reg = self.roi_heads.box_predictor(box_features.mean(dim=[2, 3]))
 
         # distill_rcn_losses = self.rcn_distill_losses(dt['t_rcn_cls'], dt['t_rcn_reg'], rcn_cls, rcn_reg)
-        distill_rcn_losses = self.calculate_roi_distillation_loss(dt['t_rcn_cls'], dt['t_rcn_reg'], rcn_cls, rcn_reg )
+        distill_rcn_losses = self.calculate_roi_distillation_loss(dt['t_rcn_cls'], dt['t_rcn_reg'], rcn_cls, rcn_reg)
         losses.update(distill_rcn_losses)
+
+        distill_box_features = self.box_features_distill_losses(dt['box_features'], box_features)
+        losses.update(distill_box_features)
 
         del dt, rcn_cls, rcn_reg, box_features, features, images
         return losses
@@ -877,4 +897,12 @@ class DistillRCNN(nn.Module):
         loss['dist_feature_loss'] = torch.mean(feature_distillation_loss)
 
         del t_feature, feature, filter_feature
+        return loss
+
+    def box_features_distill_losses(self, t_feature, feature):
+        loss = {}
+
+        feature_distillation_loss = torch.abs(t_feature - feature)
+        loss['dist_box_feature_loss'] = torch.mean(feature_distillation_loss)
+
         return loss

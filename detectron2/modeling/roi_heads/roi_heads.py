@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import inspect
 import logging
+import random
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Union
 import torch
@@ -504,8 +505,69 @@ class Res5ROIHeads(ROIHeads):
         )
         rcn_cls, rcn_reg = self.box_predictor(box_features.mean(dim=[2, 3]))
 
-        del box_features, features, proposals
-        return rcn_input_proposals, rcn_cls ,rcn_reg
+        return rcn_input_proposals, box_features, rcn_cls ,rcn_reg
+
+    def get_distill_target_meta(self, features, proposals):
+
+        rpn_boxes, rpn_logits = [x.proposal_boxes for x in proposals], [x.objectness_logits for x in proposals]
+        top_k = 128
+        rand_k = 64
+
+        rcn_input_proposals = []
+        for x, y in zip(rpn_boxes, rpn_logits):
+            _, idxs = torch.sort(y, descending=True)
+            top_pro = x[idxs[:top_k]]
+            rand_idx = torch.randperm(top_k, device='cuda')[:rand_k]
+            rcn_input_proposals.append(top_pro[rand_idx])
+
+        box_features = self._shared_roi_transform(
+            [features[f] for f in self.in_features], rcn_input_proposals
+        )
+        rcn_cls, rcn_reg = self.box_predictor(box_features.mean(dim=[2, 3]))
+
+        return box_features, rcn_cls ,rcn_reg
+
+
+    def generate_soften_proposal(self, features, proposals):
+
+        # sort proposals according to their objectness score
+        # get proposal information: bbox, objectness score, proposal mode & image size
+        
+        proposal_bbox, proposal_score = [x.proposal_boxes for x in proposals], [x.objectness_logits for x in proposals]
+        selected_proposals = []
+
+        for x, y in zip(proposal_bbox, proposal_score):
+        # choose first 128 highest objectness score proposals  and then random choose 64 proposals from them
+            inds = torch.sort(y, descending=True)[1]
+            list = range(0, 128, 1)
+            selected_proposal_index = random.sample(list, 64)
+            selected_proposal_bbox = x[inds][selected_proposal_index]
+
+            selected_proposals.append(selected_proposal_bbox)
+
+        # keep top-5 proposals for feature distillation
+        # for i in range(5):
+        #     if i == 0:
+        #         feature_proposal_bbox = proposal_bbox[i]
+        #         feature_proposal_bbox = feature_proposal_bbox.view(-1, 4)
+        #         feature_proposal_score = proposal_score[i].view(-1, 1)
+        #     else:
+        #         feature_proposal_bbox = torch.cat((feature_proposal_bbox, proposal_bbox[i].view(-1, 4)), 0)
+        #         feature_proposal_score = torch.cat((feature_proposal_score, proposal_score[i].view(-1, 1)), 1)
+        # feature_proposal_bbox = feature_proposal_bbox.view(-1, 4)
+        # feature_proposal_score = feature_proposal_score.view(-1)
+        # feature_proposals = BoxList(feature_proposal_bbox, image_size, proposal_mode)
+        # feature_proposals.add_field("objectness", feature_proposal_score)
+        # feature_proposals = [feature_proposals]
+
+        # generate soften proposal labels
+        box_features = self._shared_roi_transform(
+            [features[f] for f in self.in_features], selected_proposals
+        )
+        soften_scores, soften_bboxes = self.box_predictor(box_features.mean(dim=[2, 3]))
+        # soften_scores, soften_bboxes = self.roi_heads.calculate_soften_label(features, selected_proposals, targets)  # use ROI-subnet to generate final results
+
+        return selected_proposals, box_features, soften_scores, soften_bboxes
 
 @ROI_HEADS_REGISTRY.register()
 class StandardROIHeads(ROIHeads):

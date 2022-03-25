@@ -103,8 +103,6 @@ _C.DATASETS.PROPOSAL_FILES_TEST = ()
 # Number of top scoring precomputed proposals to keep for test
 _C.DATASETS.PRECOMPUTED_PROPOSAL_TOPK_TEST = 1000
 
-_C.DATASETS.MEMORY = ""
-
 # -----------------------------------------------------------------------------
 # DataLoader
 # -----------------------------------------------------------------------------
@@ -626,7 +624,7 @@ _C.SOLVER.MASK_LR = 0.00001
 _C.MODEL.DISTILL = "DistillRCNN"
 
 _C.IOD = CN()
-_C.IOD.MEMORY = ''
+_C.IOD.MEMORY = ()
 _C.IOD.OLD_CLS = 15
 _C.IOD.NEW_CLS = 5
 _C.IOD.DISTILL = True

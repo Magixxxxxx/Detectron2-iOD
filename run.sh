@@ -51,3 +51,7 @@ python distill.py --num-gpus 4 --eval-only --config-file "myILOD/configs/distill
 python distill.py --config-file "myILOD/configs/firststep.yaml"
 python distill.py --resume --config-file "myILOD/configs/incre.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" OUTPUT_DIR './output/base15_+5'
 python distill.py --resume --config-file "myILOD/configs/incre.yaml" MODEL.WEIGHTS "output/base15_fasterilod/model_final.pth" OUTPUT_DIR './output/base15_fasterilod_+5'
+
+
+# eval
+python distill.py --num-gpus 4 --eval-only --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/eval'

@@ -507,7 +507,7 @@ class DistillRCNN(nn.Module):
         losses.update(proposal_losses)
 
         # ZJW
-        with torch.no_grad(): dt = self.t_model.get_distill_target_meta(batched_inputs, features, proposals)
+        with torch.no_grad(): dt = self.t_model.get_distill_target(batched_inputs, features, proposals)
 
         # rpn
         # distill_rpn_losses = self.rpn_distill_losses(dt['t_rpn_logits'][0], dt['t_rpn_boxes'][0], rpn_logits[0], rpn_boxes[0])
@@ -827,12 +827,12 @@ class DistillRCNN(nn.Module):
         # modified_soften_boxes = soften_bboxes[:, 1:, :]  # exclude background bbox
         # modified_target_bboxes = target_bboxes[:, 1:num_of_distillation_categories, :]  # exclude background bbox
 
-        modified_soften_boxes = soften_bboxes[:, :num_of_distillation_categories*4]  # exclude background bb:num_of_distillation_categoriesox
-        modified_target_bboxes = target_bboxes[:, :num_of_distillation_categories*4]  # exclude background bbox
+        # modified_soften_boxes = soften_bboxes[:, :]  # exclude background bb:num_of_distillation_categoriesox
+        # modified_target_bboxes = target_bboxes[:, :]  # exclude background bbox
 
         if bbs_loss == 'l2':
             l2_loss = nn.MSELoss(reduction='mean')
-            bbox_distillation_loss = l2_loss(modified_target_bboxes, modified_soften_boxes)
+            bbox_distillation_loss = l2_loss(soften_bboxes, target_bboxes)
             # bbox_distillation_loss = torch.mean(torch.mean(torch.sum(bbox_distillation_loss, dim=2), dim=1), dim=0)  # average towards categories and proposals
         # elif bbs_loss == 'smooth_l1':
         #     num_bboxes = modified_target_bboxes.size()[0]

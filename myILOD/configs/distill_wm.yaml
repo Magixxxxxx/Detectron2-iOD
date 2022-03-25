@@ -1,0 +1,26 @@
+_BASE_: "./Base-RCNN-C4.yaml"
+MODEL:
+  WEIGHTS: "./output/base_15/model_final.pth"
+  ROI_HEADS:
+    NUM_CLASSES: 20
+  ROI_BOX_HEAD:
+    CLS_AGNOSTIC_BBOX_REG: False
+DATALOADER:
+  NUM_WORKERS: 4
+DATASETS:
+  TRAIN: ('voc_2007_trainval', )
+  TEST: ('voc_2007_test', )
+SOLVER:
+  IMS_PER_BATCH: 8
+  BASE_LR: 0.001
+  STEPS: (6000,)
+  MAX_ITER: 7000
+  WARMUP_ITERS: 100
+  CHECKPOINT_PERIOD: 1000
+TEST:
+  EVAL_PERIOD: 1000
+IOD:
+  MEMORY: ('emm15_50img.json', )
+  DISTILL: True
+OUTPUT_DIR: './output/distill'
+SEED: 23

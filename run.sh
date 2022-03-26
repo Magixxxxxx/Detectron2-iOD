@@ -54,4 +54,8 @@ python distill.py --resume --config-file "myILOD/configs/incre.yaml" MODEL.WEIGH
 
 
 # eval
-python distill.py --num-gpus 4 --eval-only --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/eval'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0001 OUTPUT_DIR './output/distill_wm_1'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0002 OUTPUT_DIR './output/distill_wm_2'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/distill_wm_5'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0008 OUTPUT_DIR './output/distill_wm_8'
+python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/distill_wm_8'

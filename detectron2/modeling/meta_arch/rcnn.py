@@ -507,7 +507,7 @@ class DistillRCNN(nn.Module):
         losses.update(proposal_losses)
 
         # ZJW
-        with torch.no_grad(): dt = self.t_model.get_distill_target(batched_inputs, features, proposals)
+        with torch.no_grad(): dt = self.t_model.get_distill_target(batched_inputs)
 
         # rpn
         # distill_rpn_losses = self.rpn_distill_losses(dt['t_rpn_logits'][0], dt['t_rpn_boxes'][0], rpn_logits[0], rpn_boxes[0])

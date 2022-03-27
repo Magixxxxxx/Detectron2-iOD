@@ -3,6 +3,8 @@ import os
 import logging
 from collections import OrderedDict
 from random import randint
+
+from cv2 import randn
 from detectron2.data.build import build_batch_data_loader, get_detection_dataset_dicts
 from detectron2.data.common import DatasetFromList, MapDataset
 from detectron2.data.dataset_mapper import DatasetMapper
@@ -21,7 +23,9 @@ import detectron2.utils.comm as comm
 
 from PIL import Image, ImageDraw
 from detectron2.data.detection_utils import convert_PIL_to_numpy
-import torch, sys, logging, time
+import torch, sys, logging, time, random
+
+import numpy as np
 
 def filter_classes_instances(dataset_dicts, valid_classes):
 
@@ -41,19 +45,42 @@ def filter_classes_instances(dataset_dicts, valid_classes):
 class Trainer(DefaultTrainer):
 
     def __init__(self, cfg):
+
         super().__init__(cfg)
         
-        if comm.get_world_size() > 1:
-            md = self.model.module
-        else:
-            md = self.model
-            
+        md = self.model.module if comm.get_world_size() > 1 else self.model
+
         if cfg.IOD.DISTILL:
             sd = torch.load(cfg.MODEL.WEIGHTS, map_location='cpu')['model']  # why map_location leads to cruption
             md.load_state_dict(sd, strict = False)
             md.t_model.load_state_dict(sd)        
         else:
             self.resume_or_load()
+
+    def Mixup(self, data):
+
+        # input data
+        for each_img in data:
+            if each_img['memory'] == False and torch.rand(1) > 0.5:
+                lambd = np.random.beta(2,2)
+                img1 = each_img['image'].to('cuda')
+                # memory data
+                mm_data = random.choice(self.memory)
+                img2= mm_data['image'].to('cuda')
+
+                # operation
+                height = max(img1.shape[1], img2.shape[1])
+                width = max(img1.shape[2], img2.shape[2])
+
+                mix_img = torch.zeros([3 ,height, width], device='cuda')
+                mix_img[:, :img1.shape[1], :img1.shape[2]] = img1 * lambd
+                mix_img[:, :img2.shape[1], :img2.shape[2]] += img2 * (1. - lambd)
+
+                # fix
+                each_img['image'] = mix_img
+                each_img['instances']._fields['gt_boxes'].tensor = torch.cat((each_img['instances']._fields['gt_boxes'].tensor, mm_data['instances']._fields['gt_boxes'].tensor))
+                each_img['instances']._fields['gt_classes'] = torch.cat((each_img['instances']._fields['gt_classes'], mm_data['instances']._fields['gt_classes']))
+                each_img['loss_weight'] = None
 
     def run_step(self):
 
@@ -67,17 +94,10 @@ class Trainer(DefaultTrainer):
         start = time.perf_counter()
 
         data = next(self._data_loader_iter)
+        self.Mixup(data)
         data_time = time.perf_counter() - start
 
         loss_dict = self.model(data)
-        # loss_dict['loss_cls'] *= 2
-        # loss_dict['loss_box_reg'] *= 2
-        # loss_dict['loss_rpn_cls'] *= 2
-        # loss_dict['loss_rpn_loc'] *= 2
-
-        # loss_dict['dist_rpn_loss'] *= 2
-        # loss_dict['dist_feature_loss'] *= 2
-        # loss_dict['distill_rcn_loss'] *= 2
         losses = sum(loss_dict.values())
         self.optimizer.zero_grad()
         losses.backward()
@@ -93,8 +113,7 @@ class Trainer(DefaultTrainer):
 
         self.optimizer.step()
 
-    @classmethod
-    def build_train_loader(cls, cfg):
+    def build_train_loader(self, cfg):
         dataset_dicts = get_detection_dataset_dicts(
             cfg.DATASETS.TRAIN,
             filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
@@ -108,20 +127,24 @@ class Trainer(DefaultTrainer):
         print(len(dataset_dicts))
         if cfg.IOD.DISTILL:
             valid_classes = range(cfg.IOD.OLD_CLS, cfg.IOD.OLD_CLS + cfg.IOD.NEW_CLS)
-        else:
-            valid_classes = range(cfg.IOD.OLD_CLS)
-        dataset_dicts = filter_classes_instances(dataset_dicts, valid_classes)
-        
+            dataset_dicts = filter_classes_instances(dataset_dicts, valid_classes)
+
         if cfg.IOD.MEMORY:
-            memory =  get_detection_dataset_dicts(
-                cfg.IOD.MEMORY,
-                filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
-                min_keypoints=0,
-                proposal_files=cfg.DATASETS.PROPOSAL_FILES_TRAIN if cfg.MODEL.LOAD_PROPOSALS else None
-                )
-            for m in memory: m['memory'] = True
-            dataset_dicts += memory   
+            memory_dicts = get_detection_dataset_dicts(
+                    cfg.IOD.MEMORY,
+                    filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
+                    min_keypoints=0,
+                    proposal_files=cfg.DATASETS.PROPOSAL_FILES_TRAIN if cfg.MODEL.LOAD_PROPOSALS else None
+                    )
+            memory_dataset = DatasetFromList(memory_dicts)
+            memory_dataset = MapDataset(memory_dataset, DatasetMapper(cfg, True))
+            for m_d in memory_dicts: m_d['memory'] = True
+            for d_d in dataset_dicts: d_d['memory'] = False
+            self.memory = memory_dataset
+            dataset_dicts += memory_dicts
+
         print(len(dataset_dicts))
+
         dataset = DatasetFromList(dataset_dicts, copy=False)
         mapper = DatasetMapper(cfg, True)
         dataset = MapDataset(dataset, mapper)
@@ -139,7 +162,7 @@ class Trainer(DefaultTrainer):
             aspect_ratio_grouping=cfg.DATALOADER.ASPECT_RATIO_GROUPING,
             num_workers=cfg.DATALOADER.NUM_WORKERS,
         )
-    
+        
     @classmethod
     def build_model(cls, cfg):
         """

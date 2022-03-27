@@ -58,4 +58,49 @@ python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MO
 python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0002 OUTPUT_DIR './output/distill_wm_2'
 python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0005 OUTPUT_DIR './output/distill_wm_5'
 python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0008 OUTPUT_DIR './output/distill_wm_8'
-python distill.py --num-gpus 2 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/distill_wm_8'
+
+
+python distill.py --num-gpus 4 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.0008 OUTPUT_DIR './output/distill_wom_8'
+
+python distill.py --num-gpus 4 --config-file "myILOD/configs/distill_wm.yaml" MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.MEMORY "('15_50ins.json',)" IOD.OLD_CLS 15 IOD.NEW_CLS 5 SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.001 OUTPUT_DIR './output/distill_wm_50ins_8_10'
+
+
+python distill.py --config-file "myILOD/configs/distill_wm.yaml" --num-gpus 4 SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.001 \
+MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 \
+IOD.MEMORY "('15_50ins.json',)" IOD.MEMORY_AUG True \
+IOD.BACKBON_FEATRUE True \
+IOD.BOX_FEATRUE True \
+IOD.ROI_FEATRUE True \
+OUTPUT_DIR './output/distill_50ins_b8_10_Mixup_[f,b,r]'
+
+python distill.py --config-file "myILOD/configs/distill_wm.yaml" --num-gpus 4 SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.001 \
+MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 \
+IOD.MEMORY "('15_50ins.json',)" IOD.MEMORY_AUG True \
+IOD.BACKBON_FEATRUE True \
+IOD.BOX_FEATRUE False \
+IOD.ROI_FEATRUE True \
+OUTPUT_DIR './output/distill_50ins_b8_10_Mixup_[f,r]'
+
+python distill.py --config-file "myILOD/configs/distill_wm.yaml" --num-gpus 4 SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.001 \
+MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 \
+IOD.MEMORY "('15_50ins.json',)" IOD.MEMORY_AUG True \
+IOD.BACKBON_FEATRUE False \
+IOD.BOX_FEATRUE False \
+IOD.ROI_FEATRUE True \
+OUTPUT_DIR './output/distill_50ins_b8_10_Mixup_[r]'
+
+python distill.py --config-file "myILOD/configs/distill_wm.yaml" --num-gpus 4 SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.001 \
+MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 \
+IOD.MEMORY "('15_50ins.json',)" IOD.MEMORY_AUG True \
+IOD.BACKBON_FEATRUE False \
+IOD.BOX_FEATRUE True \
+IOD.ROI_FEATRUE True \
+OUTPUT_DIR './output/distill_50ins_b8_10_Mixup_[b, r]'
+
+python distill.py --config-file "myILOD/configs/distill_wm.yaml" --num-gpus 4 SOLVER.IMS_PER_BATCH 8 SOLVER.BASE_LR 0.001 \
+MODEL.WEIGHTS "output/base_15/model_final.pth" IOD.OLD_CLS 15 IOD.NEW_CLS 5 \
+IOD.MEMORY "('15_50ins.json',)" IOD.MEMORY_AUG True \
+IOD.BACKBON_FEATRUE False \
+IOD.BOX_FEATRUE True \
+IOD.ROI_FEATRUE True \
+OUTPUT_DIR './output/distill_50ins_b8_10_Mixup[on_0.5]_[b,r]'

@@ -28,7 +28,7 @@ class PascalVOCDetectionEvaluator(DatasetEvaluator):
     official API.
     """
 
-    def __init__(self, dataset_name):
+    def __init__(self, dataset_name, old ,new):
         """
         Args:
             dataset_name (str): name of the dataset, e.g., "voc_2007_test"
@@ -42,6 +42,7 @@ class PascalVOCDetectionEvaluator(DatasetEvaluator):
         self._is_2007 = meta.year == 2007
         self._cpu_device = torch.device("cpu")
         self._logger = logging.getLogger(__name__)
+        self.old, self.new = old, new
 
     def reset(self):
         self._predictions = defaultdict(list)  # class name -> list of prediction strings
@@ -110,7 +111,7 @@ class PascalVOCDetectionEvaluator(DatasetEvaluator):
         mAP = {iou: np.mean(x) for iou, x in aps.items()}
         ret["bbox"] = {"AP": np.mean(list(mAP.values())), "AP50": mAP[50], "AP75": mAP[75]}
         ret["perclass_ap50"] = {cls_name:aps[50][cls_id] for cls_id, cls_name in enumerate(self._class_names)}
-        ret["2step"] = {'old': np.mean(aps[50][:15]), 'new':np.mean(aps[50][15:])}
+        ret["2step"] = {'old': np.mean(aps[50][:self.old]), 'new':np.mean(aps[50][self.old:])}
         return ret
 
 

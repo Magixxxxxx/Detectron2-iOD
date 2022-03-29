@@ -20,8 +20,7 @@ def getmm_img(total_d, base_cats):
     # 对每类取50图
     img_id_set = set()
     for i in base_cats:
-        sampled_ids = random.sample(cat2img_ids[i], 50)
-        print(len(sampled_ids))
+        sampled_ids = random.sample(cat2img_ids[i], 10)
         for id in sampled_ids:
             for ann in img_id2anns[id]:
                 if ann['category_id'] == i: 
@@ -85,13 +84,13 @@ def getNew(total_d, new_cats):
     return new_annotations
 
 def getMemory(base_cats):
-    output_filename = '15_50ins_alllabel.json'
+    nums = base_cats[-1] - base_cats[0]
+    output_filename = '{}_10img.json'.format(nums+1)
     with open(os.path.join(VOC_PATH, 'voc_train2007.json')) as total_f:
         total_d = dict(json.load(total_f))
         print(len(total_d['images']))
         print(len(total_d['annotations']))
-        annotations = getmm_ann(total_d, base_cats)
-        
+        annotations = getmm_img(total_d, base_cats)
         # 数据信息
         meta = [0] * 21
         for ann in annotations:
@@ -105,5 +104,7 @@ def getMemory(base_cats):
             out_f.write(json.dumps(final_d))
             
 if __name__ == '__main__':
-    getMemory(range(1, 15))
+    a = [range(1, 11), range(1, 16), range(1, 20)]
+    for r in a:
+        getMemory(r)
     print("----end----")

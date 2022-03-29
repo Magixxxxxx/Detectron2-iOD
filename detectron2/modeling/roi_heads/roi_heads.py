@@ -527,7 +527,6 @@ class Res5ROIHeads(ROIHeads):
 
         return box_features, rcn_cls ,rcn_reg
 
-
     def generate_soften_proposal(self, features, proposals):
 
         # sort proposals according to their objectness score

@@ -32,7 +32,7 @@ def filter_classes_instances(dataset_dicts, valid_classes):
     logger = logging.getLogger(__name__)
     logger.info("Valid classes: " + str(valid_classes))
     logger.info("Removing objects ...")
-
+    
     for entry in copy.copy(dataset_dicts):
         annos = entry["annotations"]
         for annotation in copy.copy(annos):
@@ -41,6 +41,11 @@ def filter_classes_instances(dataset_dicts, valid_classes):
         if len(annos) == 0:
             dataset_dicts.remove(entry)
     return dataset_dicts
+
+def reweight(loss_dict, r):
+    task_loss = sum(v for k, v in loss_dict.items() if 'dist' not in k)
+    distill_loss = sum(v for k, v in loss_dict.items() if 'dist' in k)
+    return (1 - r) * task_loss + r * distill_loss
 
 class Trainer(DefaultTrainer):
 
@@ -53,7 +58,10 @@ class Trainer(DefaultTrainer):
         if cfg.IOD.DISTILL:
             sd = torch.load(cfg.MODEL.WEIGHTS, map_location='cpu')['model']  # why map_location leads to cruption
             md.load_state_dict(sd, strict = False)
-            md.t_model.load_state_dict(sd)        
+            md.t_model.load_state_dict(sd)
+            
+            # sd = torch.load("myILOD/params/R-50.pkl", map_location='cpu')['model']  # why map_location leads to cruption
+            # md.t_model.load_state_dict(sd)
         else:
             self.resume_or_load()
 
@@ -61,8 +69,8 @@ class Trainer(DefaultTrainer):
 
         # input data
         for each_img in data:
-            if each_img['memory'] == False and torch.rand(1) > 0.5:
-                lambd = np.random.beta(2,2)
+            if torch.rand(1) > self.cfg.IOD.MIXPRO:
+                lambd = np.random.beta(5,5)
                 img1 = each_img['image'].to('cuda')
                 # memory data
                 mm_data = random.choice(self.memory)
@@ -80,6 +88,8 @@ class Trainer(DefaultTrainer):
                 each_img['image'] = mix_img
                 each_img['instances']._fields['gt_boxes'].tensor = torch.cat((each_img['instances']._fields['gt_boxes'].tensor, mm_data['instances']._fields['gt_boxes'].tensor))
                 each_img['instances']._fields['gt_classes'] = torch.cat((each_img['instances']._fields['gt_classes'], mm_data['instances']._fields['gt_classes']))
+                each_img['loss_weight'] = lambd
+            else:
                 each_img['loss_weight'] = None
 
     def run_step(self):
@@ -94,11 +104,11 @@ class Trainer(DefaultTrainer):
         start = time.perf_counter()
 
         data = next(self._data_loader_iter)
-        self.Mixup(data)
+        if self.cfg.IOD.MEMORY_AUG: self.Mixup(data)
         data_time = time.perf_counter() - start
 
         loss_dict = self.model(data)
-        losses = sum(loss_dict.values())
+        losses = reweight(loss_dict, self.cfg.IOD.REWEIGHT)
         self.optimizer.zero_grad()
         losses.backward()
         
@@ -140,9 +150,8 @@ class Trainer(DefaultTrainer):
             memory_dataset = MapDataset(memory_dataset, DatasetMapper(cfg, True))
             for m_d in memory_dicts: m_d['memory'] = True
             for d_d in dataset_dicts: d_d['memory'] = False
-            self.memory = memory_dataset
             dataset_dicts += memory_dicts
-
+            self.memory = memory_dataset
         print(len(dataset_dicts))
 
         dataset = DatasetFromList(dataset_dicts, copy=False)
@@ -154,6 +163,8 @@ class Trainer(DefaultTrainer):
         logger.info("Using training sampler {}".format(sampler_name))
         
         sampler = TrainingSampler(len(dataset))
+
+        
 
         return build_batch_data_loader(
             dataset,
@@ -185,7 +196,7 @@ class Trainer(DefaultTrainer):
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
         if output_folder is None:
             output_folder = os.path.join(cfg.OUTPUT_DIR, "inference")
-        return PascalVOCDetectionEvaluator(dataset_name) 
+        return PascalVOCDetectionEvaluator(dataset_name, cfg.IOD.OLD_CLS, cfg.IOD.NEW_CLS) 
 
     @classmethod
     def test_with_TTA(cls, cfg, model):

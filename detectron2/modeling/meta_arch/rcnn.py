@@ -499,7 +499,7 @@ class DistillRCNN(nn.Module):
             proposals = [x["proposals"].to(self.device) for x in batched_inputs]
             proposal_losses = {}
 
-        _, detector_losses = self.roi_heads(images, features, proposals, gt_instances)
+        a, detector_losses = self.roi_heads(images, features, proposals, gt_instances)
         if self.vis_period > 0:
             storage = get_event_storage()
             if storage.iter % self.vis_period == 0:
@@ -539,6 +539,7 @@ class DistillRCNN(nn.Module):
                 losses.update(distill_rcn_losses)
 
             del dt, rcn_cls, rcn_reg, box_features, features, images
+        
         return losses
 
     def inference(self, batched_inputs, detected_instances=None, do_postprocess=True):
@@ -778,7 +779,8 @@ class DistillRCNN(nn.Module):
 
         soften_scores = torch.cat((soften_scores[:, : num_of_distillation_categories], soften_scores[:, -1].unsqueeze(1)),1) 
         target_scores = torch.cat((target_scores[:, : num_of_distillation_categories], target_scores[:, -1].unsqueeze(1)),1)
-        
+        # modified_soften_scores = soften_scores
+        # modified_target_scores = target_scores
         # compute distillation loss
         if cls_preprocess == 'sigmoid':
             soften_scores = F.sigmoid(soften_scores)

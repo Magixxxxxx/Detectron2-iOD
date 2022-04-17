@@ -59,9 +59,6 @@ class Trainer(DefaultTrainer):
             sd = torch.load(cfg.MODEL.WEIGHTS, map_location='cpu')['model']  # why map_location leads to cruption
             md.load_state_dict(sd, strict = False)
             md.t_model.load_state_dict(sd)
-            
-            # sd = torch.load("myILOD/params/R-50.pkl", map_location='cpu')['model']  # why map_location leads to cruption
-            # md.t_model.load_state_dict(sd)
         else:
             self.resume_or_load()
 
@@ -135,9 +132,9 @@ class Trainer(DefaultTrainer):
 
         # ZJW
         print(len(dataset_dicts))
-        if cfg.IOD.DISTILL:
+        if cfg.IOD.NEW_CLS:
             valid_classes = range(cfg.IOD.OLD_CLS, cfg.IOD.OLD_CLS + cfg.IOD.NEW_CLS)
-            dataset_dicts = filter_classes_instances(dataset_dicts, valid_classes)
+            dataset_dicts = filter_classes_instances(dataset_dicts, valid_classes)        
 
         if cfg.IOD.MEMORY:
             memory_dicts = get_detection_dataset_dicts(
@@ -163,8 +160,6 @@ class Trainer(DefaultTrainer):
         logger.info("Using training sampler {}".format(sampler_name))
         
         sampler = TrainingSampler(len(dataset))
-
-        
 
         return build_batch_data_loader(
             dataset,

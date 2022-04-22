@@ -237,6 +237,16 @@ OUTPUT_DIR './output/10+10_smooth_l1box'
 python 
 
 
-python distill.py --config-file "myILOD/configs/distill/base40_COCO.yaml" --num-gpus 1 SOLVER.IMS_PER_BATCH 1 SOLVER.BASE_LR 0.005 \
+python distill.py --config-file "myILOD/configs/distill/base40_COCO.yaml" --num-gpus 2 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.01 \
 MODEL.WEIGHTS "myILOD/params/R-50.pkl" IOD.OLD_CLS 0 IOD.NEW_CLS 40 \
-OUTPUT_DIR './output/COCObase_40'
+OUTPUT_DIR './output/COCObase40_b4_0.01'
+
+python distill.py --config-file "myILOD/configs/distill/base40_COCO.yaml" --num-gpus 2 SOLVER.IMS_PER_BATCH 4 SOLVER.BASE_LR 0.01 \
+MODEL.WEIGHTS "output/COCObase40_b4_0.01/model_final.pth" IOD.OLD_CLS 40 IOD.NEW_CLS 80 \
+IOD.DISTILL True \
+IOD.BACKBON_FEATRUE False \
+IOD.RPN False \
+IOD.BOX_FEATRUE False \
+IOD.ROI_FEATRUE True \
+IOD.REWEIGHT 0.1 \
+OUTPUT_DIR './output/COCObase40+40_b4_0.01'

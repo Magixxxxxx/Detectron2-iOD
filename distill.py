@@ -105,7 +105,10 @@ class Trainer(DefaultTrainer):
         data_time = time.perf_counter() - start
 
         loss_dict = self.model(data)
-        losses = reweight(loss_dict, self.cfg.IOD.REWEIGHT)
+        if self.cfg.IOD.REWEIGHT:
+            losses = reweight(loss_dict, self.cfg.IOD.REWEIGHT)
+        else:
+            losses = sum(loss_dict.values())
         self.optimizer.zero_grad()
         losses.backward()
         
@@ -191,6 +194,8 @@ class Trainer(DefaultTrainer):
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
         if output_folder is None:
             output_folder = os.path.join(cfg.OUTPUT_DIR, "inference")
+        if "COCO" in cfg.OUTPUT_DIR:
+            return COCOEvaluator(dataset_name, cfg, True) 
         return PascalVOCDetectionEvaluator(dataset_name, cfg.IOD.OLD_CLS, cfg.IOD.NEW_CLS) 
 
     @classmethod
